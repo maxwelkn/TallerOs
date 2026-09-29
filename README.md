@@ -1,6 +1,6 @@
 # TallerOs
 
-TallerOs ayuda a administrar las operaciones de talleres de automóviles y motocicletas.
+TallerOs ayuda a administrar talleres de automóviles y motocicletas, centralizando clientes, vehículos y órdenes de reparación.
 
 API REST escrita en **C#** (ASP.NET Core) para administrar clientes, vehículos,
 órdenes de reparación, repuestos e inventario de un taller.
