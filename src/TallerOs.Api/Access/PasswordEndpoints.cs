@@ -1,6 +1,3 @@
-using Microsoft.EntityFrameworkCore;
-using TallerOs.Api.Data;
-
 namespace TallerOs.Api.Access;
 
 public static partial class AccessEndpoints
@@ -22,7 +19,7 @@ public static partial class AccessEndpoints
         {
             var (ok, message) = await service.ChangePassword(http.CurrentUser(), request.CurrentPassword, request.NewPassword);
             return ok ? Results.Ok(new { message }) : Results.BadRequest(new { message });
-        }).RequireRole(UserRole.Standard);
+        });
 
     }
 }
