@@ -123,7 +123,7 @@ Inicia sesión con el Administrador creado por `bootstrap-admin` y usa su token 
 | `PUT /api/admin/users/{id}/enabled?enabled=false` | `{}` | RF-CA-20: desactiva al usuario; su sesión abierta deja de servir. Con `enabled=true` lo reactiva. Intentar desactivar el propio Administrador se rechaza. |
 | `POST /api/admin/users/{id}/force-reset` | `{}` | RF-CA-13: invalida la contraseña y sesiones existentes; encola un código nuevo. Ejecuta `send-mail` para recibirlo. |
 
-Las rutas administrativas declaran `RequireRole(UserRole.Administrator)` en `AdminEndpoints.cs`. `RoleGuard`, definido en `SessionEndpoints.cs`, aplica la misma comprobación en el servidor para todas ellas.
+`AccessAuthorization.cs` declara en una sola tabla el rol exigido por **cada ruta**: pública, Estándar o Administrador. El middleware consulta esa tabla antes de ejecutar la operación. Una ruta de acceso nueva que no esté declarada se rechaza, de modo que no queda pública por accidente.
 
 ### Almacenamiento y cola
 
