@@ -18,8 +18,8 @@ public sealed class OutboxSender(AppDbContext db, IConfiguration configuration, 
             throw new InvalidOperationException("Configura SMTP_HOST, SMTP_USER, SMTP_PASSWORD y SMTP_FROM.");
         if (!int.TryParse(configuration["SMTP_PORT"], out var port)) port = 587;
 
-        var pending = await db.EmailOutbox.Where(x => x.State == MailState.Pending)
-            .OrderBy(x => x.CreatedUtc).ToListAsync();
+        var pending = (await db.EmailOutbox.Where(x => x.State == MailState.Pending).ToListAsync())
+            .OrderBy(x => x.CreatedUtc).ToList();
         var sent = 0;
         using var client = new SmtpClient(host, port)
         {
