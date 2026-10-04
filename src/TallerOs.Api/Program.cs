@@ -5,8 +5,14 @@ using TallerOs.Api.Data;
 using TallerOs.Api.Mail;
 
 var builder = WebApplication.CreateBuilder(args);
+var workingDirectory = Directory.GetCurrentDirectory();
+var solutionRoot = new DirectoryInfo(workingDirectory);
+while (solutionRoot.Parent is not null && !File.Exists(Path.Combine(solutionRoot.FullName, "TallerOs.slnx")))
+    solutionRoot = solutionRoot.Parent;
+var baseDirectory = File.Exists(Path.Combine(solutionRoot.FullName, "TallerOs.slnx"))
+    ? solutionRoot.FullName : workingDirectory;
 var dbPath = builder.Configuration["DB_PATH"] ?? Path.Combine("data", "talleros.db");
-var absoluteDbPath = Path.GetFullPath(dbPath);
+var absoluteDbPath = Path.GetFullPath(dbPath, baseDirectory);
 Directory.CreateDirectory(Path.GetDirectoryName(absoluteDbPath)!);
 builder.Services.AddDbContext<AppDbContext>(options => options.UseSqlite($"Data Source={absoluteDbPath}"));
 builder.Services.AddScoped<AccessService>();
