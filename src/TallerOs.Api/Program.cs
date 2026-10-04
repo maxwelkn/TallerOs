@@ -55,4 +55,5 @@ app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 app.MapAccessEndpoints();
 app.MapSessionEndpoints();
 app.MapPasswordEndpoints();
+app.MapAdminEndpoints();
 await app.RunAsync();
