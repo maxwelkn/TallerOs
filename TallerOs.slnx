@@ -1,0 +1,5 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/TallerOs.Api/TallerOs.Api.csproj" />
+  </Folder>
+</Solution>
