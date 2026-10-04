@@ -47,11 +47,24 @@ No coloques los valores en archivos versionados ni en commits. Para una cuenta G
 
 ### Envío de los correos pendientes
 
-En la **segunda terminal**, define `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD` y `SMTP_FROM` como variables de entorno con los datos de tu proveedor. Define `DB_PATH` si cambiaste su ruta en la API. Luego ejecuta:
+En la **segunda terminal**, define `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD` y `SMTP_FROM` como variables de entorno con los datos de tu proveedor. Para Gmail personal con verificación en dos pasos y una [contraseña de aplicación](https://support.google.com/accounts/answer/185833), usa estos comandos de PowerShell. La dirección remitente debe ser la de esa misma cuenta:
+
+```powershell
+$env:SMTP_HOST = 'smtp.gmail.com'
+$env:SMTP_PORT = '587'
+$env:SMTP_USER = Read-Host 'Tu dirección de Gmail'
+$env:SMTP_FROM = $env:SMTP_USER
+$secure = Read-Host 'Contraseña de aplicación de Google' -AsSecureString
+$env:SMTP_PASSWORD = [System.Net.NetworkCredential]::new('', $secure).Password.Replace(' ', '')
+```
+
+El puerto 587 usa STARTTLS. No pegues la contraseña en el chat ni la guardes en el repositorio. Define `DB_PATH` si cambiaste su ruta en la API. Luego ejecuta:
 
 ```powershell
 dotnet run --project src/TallerOs.Api --no-launch-profile -- send-mail
 ```
+
+Cuando termines la prueba, ejecuta `Remove-Item Env:SMTP_PASSWORD` en esa terminal.
 
 El comando informa cuántos correos envió. Ejecutarlo otra vez debe informar cero si no hay nuevos pendientes. Si SMTP falla, el registro o la recuperación ya terminaron bien y el correo permanece pendiente; corrige la conexión y repite el comando. Para la demo, ejecútalo después de registro, reenvío, recuperación o restablecimiento forzado. La aplicación **no envía correo dentro de esas peticiones**.
 
