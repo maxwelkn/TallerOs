@@ -54,4 +54,5 @@ using (var scope = app.Services.CreateScope())
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 app.MapAccessEndpoints();
 app.MapSessionEndpoints();
+app.MapPasswordEndpoints();
 await app.RunAsync();
