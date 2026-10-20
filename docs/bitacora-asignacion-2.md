@@ -88,7 +88,11 @@ Las comprobaciones HTTP y de almacenamiento fueron auxiliares locales, fuera de 
 
 ## Estado y límites
 
-Revisé la bitácora y pedí agregar la corrección del nombre de la rama como evidencia de mi intervención. Después autoricé trabajar en GitHub. Los cambios se organizaron en commits por propósito y la rama `feature/gestion-permisos` se publicó en `origin`. La apertura del PR forma parte de esta etapa de revisión; la integración en `main`, la etiqueta `asignacion-2` y la entrega en Moodle siguen pendientes. La unidad no se ha declarado cerrada y la guía de estudio se preparará cuando se indique ese cierre.
+Revisé la bitácora y pedí agregar la corrección del nombre de la rama como evidencia de mi intervención. Después autoricé trabajar en GitHub. Los cambios se organizaron en commits por propósito y la rama `feature/gestion-permisos` se publicó en `origin`, con el [PR #14](https://github.com/maxwelkn/TallerOs/pull/14).
+
+La revisión previa a la integración comprobó el commit `7deb2b8` desde un clon limpio: 34 pruebas aprobadas, build sin errores ni advertencias y 37 respuestas HTTP verificadas. También se repitieron la comprobación de la migración y los conflictos concurrentes. GitHub no tenía CI configurado; las comprobaciones se ejecutaron localmente sobre el código publicado.
+
+Tras recibir ese resultado, autoricé hacer el merge y terminar lo pendiente. Para cerrar la unidad se agregó la [guía de estudio](estudio-gestion-permisos.md). El cierre contempla conservar el historial al integrar, publicar `asignacion-2` y verificar un clon de esa etiqueta. El estado de la integración y la etiqueta se consulta en GitHub; este párrafo no sustituye esa comprobación. La entrega en Moodle corresponde al estudiante.
 
 No se adelantaron notificaciones internas, auditoría completa, CI/CD ni pruebas de la máquina de estados del taller.
 
