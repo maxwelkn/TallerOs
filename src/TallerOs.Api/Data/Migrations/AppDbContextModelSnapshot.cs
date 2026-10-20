@@ -185,6 +185,28 @@ namespace TallerOs.Api.Data.Migrations
                     b.ToTable("Sessions");
                 });
 
+            modelBuilder.Entity("TallerOs.Api.Infrastructure.Access.UserPermission", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Permission")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "Permission")
+                        .IsUnique();
+
+                    b.ToTable("UserPermissions");
+                });
+
             modelBuilder.Entity("TallerOs.Api.Workshop.Customer", b =>
                 {
                     b.Property<Guid>("Id")
@@ -270,6 +292,45 @@ namespace TallerOs.Api.Data.Migrations
                     b.HasIndex("VehicleId");
 
                     b.ToTable("WorkOrders");
+                });
+
+            modelBuilder.Entity("TallerOs.Domain.Permissions.PermissionRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("CreatedUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Permission")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RejectionReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("RequesterId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("ResolvedUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("ResolverId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Status")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RequesterId", "Status");
+
+                    b.ToTable("PermissionRequests");
                 });
 
             modelBuilder.Entity("TallerOs.Api.Workshop.Diagnosis", b =>
