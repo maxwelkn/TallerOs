@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using TallerOs.Api.Workshop;
+using TallerOs.Api.Infrastructure.Access;
+using TallerOs.Domain.Permissions;
 
 namespace TallerOs.Api.Data;
 
@@ -72,9 +74,17 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<Vehicle> Vehicles => Set<Vehicle>();
     public DbSet<WorkOrder> WorkOrders => Set<WorkOrder>();
     public DbSet<Diagnosis> Diagnoses => Set<Diagnosis>();
+    public DbSet<PermissionRequest> PermissionRequests => Set<PermissionRequest>();
+    public DbSet<UserPermission> UserPermissions => Set<UserPermission>();
 
     protected override void OnModelCreating(ModelBuilder model)
     {
+        model.Entity<PermissionRequest>().Property(x => x.Status).HasConversion<string>().IsConcurrencyToken();
+        model.Entity<PermissionRequest>().Property(x => x.Permission).HasMaxLength(100);
+        model.Entity<PermissionRequest>().Property(x => x.RejectionReason).HasMaxLength(1000);
+        model.Entity<PermissionRequest>().HasIndex(x => new { x.RequesterId, x.Status });
+        model.Entity<UserPermission>().Property(x => x.Permission).HasMaxLength(100);
+        model.Entity<UserPermission>().HasIndex(x => new { x.UserId, x.Permission }).IsUnique();
         model.Entity<UserAccount>().HasIndex(x => x.Email).IsUnique();
         model.Entity<UserSession>().HasIndex(x => x.TokenHash).IsUnique();
         model.Entity<ActivationToken>().HasIndex(x => x.TokenHash).IsUnique();

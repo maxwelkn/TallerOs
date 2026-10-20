@@ -1,6 +1,6 @@
 # TallerOS
 
-Sistema de gestión para un solo taller de automóviles y motocicletas. La Práctica 1 entrega el Control de acceso completo y la estructura de estados de la orden de reparación. La API usa C# y ASP.NET Core 10, Entity Framework Core y SQLite. React se incorporará en una etapa posterior.
+Sistema de gestión para un solo taller de automóviles y motocicletas. Incluye Control de acceso, Gestión de permisos con pruebas unitarias y la estructura de estados de la orden de reparación. La API usa C# y ASP.NET Core 10, Entity Framework Core y SQLite. React se incorporará en una etapa posterior.
 
 ## Requisitos y ejecución desde un clon
 
@@ -131,20 +131,169 @@ La base SQLite está en `data/talleros.db`. Comprueba que `Users.PasswordHash` n
 
 Para simular SMTP caído, registra un usuario sin ejecutar `send-mail` o configura temporalmente un servidor SMTP inaccesible antes de invocar el comando. El registro responde correctamente y el correo permanece `Pending`. Reinicia la API y vuelve a consultar los usuarios para comprobar RD-09.
 
-## Máquina de estados del negocio
+## Componentes del Core y del negocio
 
 ```mermaid
 flowchart LR
-    Cliente[React, etapa posterior] --> API[ASP.NET Core API]
-    API --> Acceso[Control de acceso]
-    API --> Taller[Dominio del taller]
-    Acceso --> BD[(SQLite)]
-    Taller --> BD
-    Acceso --> Cola[Cola de correo persistente]
-    Cola --> SMTP[Envío SMTP independiente]
+    subgraph Core[Core del curso]
+        Acceso[Control de acceso: identidad, roles y acceso efectivo]
+        Permisos[Gestión de permisos: solicitudes y resolución]
+        Notificaciones[Notificaciones: prevista; cola SMTP existente]
+        Documentos[Documentos: previsto]
+        Reportes[Reportes: previsto]
+        Auditoria[Auditoría: prevista]
+    end
+    subgraph Negocio[Módulo del taller]
+        Taller[Taller: órdenes y consulta protegida]
+    end
+    Taller -->|consulta identidad y permiso| Acceso
+    Permisos -->|obtiene actor y concede acceso| Acceso
+    Taller -.->|futuro: avisa eventos| Notificaciones
+    Taller -.->|futuro opcional: adjunta archivos| Documentos
+    Taller -.->|futuro: aporta datos agregados| Reportes
+    Taller -.->|futuro: registra acciones| Auditoria
+    Permisos -.->|futuro: avisa resolución| Notificaciones
+    Permisos -.->|futuro: registra resolución| Auditoria
 ```
 
+Las flechas continuas representan conexiones implementadas y las punteadas conexiones futuras. La cola SMTP ya existe para activación y recuperación; las notificaciones internas todavía no están implementadas. Todo se ejecuta dentro de la misma aplicación.
+
+Gestión de permisos está en `TallerOs.Domain/Permissions` y `TallerOs.Application/Permissions`. Sus contratos de acceso están en `TallerOs.Application/Access`; no conocen entidades del taller. El identificador `WorkOrders.Read` se registra en `Program.cs`. La consulta que lo consume pertenece a `TallerOs.Application/Workshop`. Los adaptadores de persistencia nuevos están en `src/TallerOs.Api/Infrastructure`; comparten el contexto existente para guardar resolución y concesión en una sola transacción. La separación física completa de infraestructura y del código heredado sigue pendiente.
+
+## Máquina de estados del negocio
+
 `WorkOrder` es la entidad central del taller. `Customer`, `Vehicle`, `WorkOrder` y `Diagnosis` están relacionados en el modelo persistente. Los cinco estados y las transiciones se declaran en `src/TallerOs.Api/Workshop/WorkOrder.cs`. Consulta [la tabla de transiciones](docs/maquina-de-estados.md). `Delivered` es terminal y `Received → InRepair` está prohibida explícitamente. Esta práctica no exige todavía las pruebas de la máquina.
+
+## Pruebas
+
+Desde la raíz de un clon con el SDK de .NET 10 y acceso a NuGet:
+
+```powershell
+dotnet test TallerOs.slnx
+```
+
+El comando restaura dependencias, compila los proyectos necesarios y ejecuta la suite xUnit de `tests/TallerOs.UnitTests`, sin iniciar la API, SQLite ni SMTP. Cada prueba prepara sus propios datos; las fases se distinguen por bloques en blanco y los nombres incluyen el requisito. Se comprueban estado y datos de resoluciones válidas, rechazo y conservación de datos ante operaciones prohibidas, permisos del actor, aislamiento de solicitudes y concesión automática. Las comprobaciones HTTP y de migraciones descritas abajo complementan la suite unitaria.
+
+## Asignación 2: Gestión de permisos
+
+Para estudiar el flujo y las decisiones de esta unidad, consulta la [guía de Gestión de permisos](docs/estudio-gestion-permisos.md).
+
+La entidad registra solicitante, permiso, estado, creación UTC, responsable de resolución, fecha UTC de resolución y motivo de rechazo. Las transiciones se deciden en `PermissionRequestTransitions`: `Pending → Approved → Applied` y `Pending → Rejected`. La aprobación pasa por `Approved` dentro del caso de uso y responde `Applied`, después de guardar también la concesión. No existe una operación HTTP para aplicar manualmente o cambiar libremente el estado.
+
+El único permiso solicitable por ahora es `WorkOrders.Read`: habilita consultar todas las órdenes mediante `GET /api/workshop/orders`. No cambia el rol ni concede administración de usuarios. Un Administrador ya tiene acceso a esa consulta. Con una base nueva, la lista estará vacía y responderá 200 si está autorizado; no se requiere crear órdenes para comprobar la concesión.
+
+### Preparación de la comprobación
+
+1. Ejecuta el arranque y `bootstrap-admin` de la sección inicial. La migración `AddPermissionRequests` se aplica al arrancar y agrega tablas sin eliminar datos anteriores. Para usar una base de demostración separada, define primero `$env:DB_PATH = 'data/asignacion2-demo.db'` y usa esa ruta también en los comandos.
+2. Registra tres usuarios distintos con `/api/access/register`: A para aprobar, B para rechazar y C para comprobar resolución propia. Actívalos antes de iniciar sesión. Puedes usar el envío de correo ya documentado. Para una comprobación local sin SMTP, usa direcciones ficticias como `a@example.test`, abre tu SQLite con un visor, busca su fila en `EmailOutbox` y abre el enlace de activación de `Body`; no edites usuarios, estados ni concesiones directamente.
+3. En una terminal para peticiones, prepara las cabeceras siguientes. Introduce los correos utilizados al crear las cuentas:
+
+```powershell
+$base = 'http://localhost:5000'
+function Open-DemoSession {
+    param([string]$Email)
+    $securePassword = Read-Host 'Contraseña de esta cuenta' -AsSecureString
+    $body = @{
+        email = $Email
+        password = [System.Net.NetworkCredential]::new('', $securePassword).Password
+    } | ConvertTo-Json
+    $session = Invoke-RestMethod "$base/api/access/login" -Method Post -ContentType 'application/json' -Body $body
+    @{ Authorization = "Bearer $($session.token)" }
+}
+$adminHeaders = Open-DemoSession (Read-Host 'Correo del Administrador')
+$userAHeaders = Open-DemoSession (Read-Host 'Correo del usuario A')
+$userBHeaders = Open-DemoSession (Read-Host 'Correo del usuario B')
+$userCHeaders = Open-DemoSession (Read-Host 'Correo del usuario C')
+$permissionBody = @{ permission = 'WorkOrders.Read' } | ConvertTo-Json
+```
+
+PowerShell muestra un error al recibir los 400, 401, 403, 404 o 409 esperados; revisa el código HTTP y el mensaje. Estas peticiones negativas deben ejecutarse individualmente para continuar después del rechazo.
+
+### RF-GP-01 y RF-GP-02: solicitudes y privacidad
+
+```powershell
+$requestA = Invoke-RestMethod "$base/api/permissions/requests" -Method Post -Headers $userAHeaders -ContentType 'application/json' -Body $permissionBody
+$requestB = Invoke-RestMethod "$base/api/permissions/requests" -Method Post -Headers $userBHeaders -ContentType 'application/json' -Body $permissionBody
+$requestC = Invoke-RestMethod "$base/api/permissions/requests" -Method Post -Headers $userCHeaders -ContentType 'application/json' -Body $permissionBody
+Invoke-RestMethod "$base/api/permissions/requests/mine" -Headers $userAHeaders
+Invoke-RestMethod "$base/api/permissions/requests/pending" -Headers $adminHeaders
+Invoke-RestMethod "$base/api/permissions/requests/pending" -Headers $userAHeaders
+```
+
+La creación devuelve 201 y `Pending`. `requesterId` se toma de la sesión; enviar otro ID no permite suplantar al solicitante. `/mine` devuelve solo las solicitudes propias y `/pending` solo pendientes para Administrador. La última petición devuelve 403. No hay parámetros para pedir las solicitudes de otro usuario.
+
+### RF-GP-03 y RF-GP-05: aprobación y efecto inmediato
+
+Primero comprueba el 403 sin permiso; después aprueba con el Administrador:
+
+```powershell
+Invoke-RestMethod "$base/api/workshop/orders" -Headers $userAHeaders
+Invoke-RestMethod "$base/api/permissions/requests/$($requestA.id)/approve" -Method Post -Headers $adminHeaders
+Invoke-RestMethod "$base/api/workshop/orders" -Headers $userAHeaders
+```
+
+La aprobación devuelve `Applied`, `resolverId` y `resolvedUtc`. La consulta posterior devuelve 200 con la misma sesión de A. La resolución y la concesión se guardan juntas: un conflicto revierte ambas. En SQLite se puede inspeccionar `PermissionRequests` y `UserPermissions` sin modificarlas.
+
+### RF-GP-04: rechazo con motivo
+
+```powershell
+Invoke-RestMethod "$base/api/permissions/requests/$($requestB.id)/reject" -Method Post -Headers $adminHeaders -ContentType 'application/json' -Body '{"reason":"   "}'
+Invoke-RestMethod "$base/api/permissions/requests/mine" -Headers $userBHeaders
+Invoke-RestMethod "$base/api/permissions/requests/$($requestB.id)/reject" -Method Post -Headers $adminHeaders -ContentType 'application/json' -Body '{"reason":"Acceso no requerido para sus funciones"}'
+Invoke-RestMethod "$base/api/workshop/orders" -Headers $userBHeaders
+```
+
+El motivo vacío produce 400 y conserva `Pending`. Un motivo válido produce `Rejected`, responsable, fecha y `rejectionReason`. Se aceptan hasta 1000 caracteres y se quitan los espacios exteriores. B conserva el rechazo de acceso 403.
+
+### RF-GP-06: transiciones prohibidas
+
+```powershell
+Invoke-RestMethod "$base/api/permissions/requests/$($requestA.id)/approve" -Method Post -Headers $adminHeaders
+Invoke-RestMethod "$base/api/permissions/requests/$($requestB.id)/approve" -Method Post -Headers $adminHeaders
+Invoke-RestMethod "$base/api/permissions/requests/mine" -Headers $userAHeaders
+Invoke-RestMethod "$base/api/permissions/requests/mine" -Headers $userBHeaders
+```
+
+Las dos aprobaciones devuelven 409; A sigue `Applied` y B sigue `Rejected` con su resolución original. La suite también intenta `Rejected → Applied` directamente sobre la entidad y verifica el rechazo con conservación del estado y del motivo. Las operaciones concurrentes usan el estado original como token de concurrencia de EF Core; una resolución obsoleta no sobrescribe otra.
+
+### RF-GP-07: nadie resuelve su propia solicitud
+
+C creó su solicitud cuando era Estándar. Promuévelo con el Administrador para comprobar la regla sin que el rechazo se deba únicamente al rol:
+
+```powershell
+$userC = Invoke-RestMethod "$base/api/access/me" -Headers $userCHeaders
+Invoke-RestMethod "$base/api/admin/users/$($userC.id)/role" -Method Put -Headers $adminHeaders -ContentType 'application/json' -Body '{"role":"Administrator"}'
+Invoke-RestMethod "$base/api/permissions/requests/$($requestC.id)/approve" -Method Post -Headers $userCHeaders
+Invoke-RestMethod "$base/api/permissions/requests/$($requestC.id)/reject" -Method Post -Headers $userCHeaders -ContentType 'application/json' -Body '{"reason":"Motivo de prueba"}'
+Invoke-RestMethod "$base/api/permissions/requests/mine" -Headers $userCHeaders
+```
+
+Ambas resoluciones producen 403 y la solicitud sigue `Pending`. El rol se consulta en servidor en cada petición, por lo que la sesión existente de C refleja la promoción.
+
+### RD-06, RD-07 y RD-09: seguridad, entrada y reinicio
+
+```powershell
+Invoke-RestMethod "$base/api/permissions/requests/mine"
+Invoke-RestMethod "$base/api/permissions/requests/$($requestC.id)/approve" -Method Post -Headers $userBHeaders
+Invoke-RestMethod "$base/api/permissions/requests" -Method Post -Headers $userBHeaders -ContentType 'application/json' -Body '{}'
+Invoke-RestMethod "$base/api/permissions/requests" -Method Post -Headers $userBHeaders -ContentType 'application/json' -Body '{"permission":7}'
+Invoke-RestMethod "$base/api/permissions/requests" -Method Post -Headers $userBHeaders -ContentType 'application/json' -Body '{"permission":"Administrator"}'
+```
+
+Se esperan 401 sin sesión, 403 para resolver como Estándar y 400 para entradas inválidas. Una solicitud con GUID válido inexistente devuelve 404 al intentar resolverla. El Administrador no crea solicitudes; una nueva solicitud por un permiso ya concedido devuelve 409.
+
+Detén la API con Ctrl+C y vuelve a iniciarla con la misma `DB_PATH`. Consulta `/mine` con A y B y `/api/workshop/orders` con A: deben conservarse `Applied`, `Rejected`, el motivo, las fechas y la concesión. Las sesiones siguen funcionando mientras no hayan vencido o sido revocadas. Para repetir toda la demostración, usa otras cuentas o una nueva ruta de base de demostración; no borres la base habitual.
+
+### Entrega de la Asignación 2
+
+La entrega exige código, suite, README y [bitácora de sesión](docs/bitacora-asignacion-2.md) en el punto etiquetado `asignacion-2`. Una vez revisados, autorizados los commits y la publicación, comprueba el estado y crea/publica esa etiqueta sin mover las anteriores:
+
+```powershell
+git tag asignacion-2
+git push origin asignacion-2
+```
+
+En Moodle corresponde entregar la URL del repositorio y `asignacion-2`. La implementación local por sí sola no acredita que la etiqueta ya esté publicada. Esta unidad no incluye auditoría completa, notificaciones de permisos, CI/CD ni la suite de estados del taller.
 
 ## Flujo Git de la práctica
 

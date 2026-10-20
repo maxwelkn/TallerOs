@@ -8,4 +8,11 @@
 *.db-shm
 *.db-wal
 .env
+.env.*
+!.env.example
+[Tt]est[Rr]esults/
+/src/TallerOs.Api/Properties/launchSettings.json
 
+/AGENTS.md
+/guidelines.md
+/.codex/MEMORY.md
