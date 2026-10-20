@@ -22,7 +22,12 @@ public static class AccessAuthorization
             [("GET", "/api/admin/users")] = UserRole.Administrator,
             [("PUT", "/api/admin/users/{id:guid}/role")] = UserRole.Administrator,
             [("PUT", "/api/admin/users/{id:guid}/enabled")] = UserRole.Administrator,
-            [("POST", "/api/admin/users/{id:guid}/force-reset")] = UserRole.Administrator
+            [("POST", "/api/admin/users/{id:guid}/force-reset")] = UserRole.Administrator,
+            [("POST", "/api/permissions/requests")] = UserRole.Standard,
+            [("GET", "/api/permissions/requests/mine")] = UserRole.Standard,
+            [("GET", "/api/permissions/requests/pending")] = UserRole.Administrator,
+            [("POST", "/api/permissions/requests/{id:guid}/approve")] = UserRole.Administrator,
+            [("POST", "/api/permissions/requests/{id:guid}/reject")] = UserRole.Administrator
         };
 
     public static WebApplication UseAccessAuthorization(this WebApplication app)
@@ -30,8 +35,7 @@ public static class AccessAuthorization
         app.Use(async (http, next) =>
         {
             var endpoint = http.GetEndpoint() as RouteEndpoint;
-            if (endpoint is null || (!http.Request.Path.StartsWithSegments("/api/access")
-                && !http.Request.Path.StartsWithSegments("/api/admin")))
+            if (endpoint is null || !http.Request.Path.StartsWithSegments("/api"))
             {
                 await next(http);
                 return;
