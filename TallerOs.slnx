@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/TallerOs.Api/TallerOs.Api.csproj" />
+    <Project Path="src/TallerOs.Application/TallerOs.Application.csproj" />
     <Project Path="src/TallerOs.Domain/TallerOs.Domain.csproj" />
   </Folder>
 </Solution>
