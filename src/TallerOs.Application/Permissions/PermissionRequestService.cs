@@ -47,7 +47,7 @@ public sealed class PermissionRequestService(IPermissionRequestStore store, ICur
         if (request is null) return Outcome<PermissionRequestView>.Fail(Failure.NotFound, "Solicitud no encontrada.");
         if (request.RequesterId == actor.Id)
             return Outcome<PermissionRequestView>.Fail(Failure.Forbidden, "No puedes resolver tu propia solicitud.");
-        if (!approve && (string.IsNullOrWhiteSpace(reason) || reason.Length > 1000))
+        if (!approve && (reason is null || reason.Length > 1000))
             return Outcome<PermissionRequestView>.Fail(Failure.Invalid, "Indica un motivo de hasta 1000 caracteres.");
 
         try

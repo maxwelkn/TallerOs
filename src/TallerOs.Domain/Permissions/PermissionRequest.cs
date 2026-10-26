@@ -40,7 +40,7 @@ public sealed class PermissionRequest
     public void Reject(Guid resolverId, DateTimeOffset resolvedUtc, string? reason)
     {
         EnsureResolver(resolverId, resolvedUtc);
-        if (string.IsNullOrWhiteSpace(reason) || reason.Length > 1000)
+        if (reason is null || reason.Length > 1000)
             throw new PermissionRuleException("El motivo es obligatorio y admite hasta 1000 caracteres.");
 
         MoveTo(PermissionRequestStatus.Rejected);
