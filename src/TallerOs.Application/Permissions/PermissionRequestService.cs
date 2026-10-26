@@ -41,7 +41,7 @@ public sealed class PermissionRequestService(IPermissionRequestStore store, ICur
     {
         var actor = currentActor.Get();
         if (actor is null) return Outcome<PermissionRequestView>.Fail(Failure.Unauthorized, "Inicia sesión.");
-        if (!actor.IsAdministrator)
+        if (!approve && !actor.IsAdministrator)
             return Outcome<PermissionRequestView>.Fail(Failure.Forbidden, "Se requiere Administrador.");
         var request = await store.Find(id, cancellationToken);
         if (request is null) return Outcome<PermissionRequestView>.Fail(Failure.NotFound, "Solicitud no encontrada.");
