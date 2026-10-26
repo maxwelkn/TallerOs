@@ -72,5 +72,6 @@ public static class PermissionRequestTransitions
     public static bool IsAllowed(PermissionRequestStatus from, PermissionRequestStatus to) => (from, to) is
         (PermissionRequestStatus.Pending, PermissionRequestStatus.Approved) or
         (PermissionRequestStatus.Approved, PermissionRequestStatus.Applied) or
-        (PermissionRequestStatus.Pending, PermissionRequestStatus.Rejected);
+        (PermissionRequestStatus.Pending, PermissionRequestStatus.Rejected) or
+        (PermissionRequestStatus.Approved, PermissionRequestStatus.Rejected);
 }
