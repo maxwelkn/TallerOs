@@ -191,7 +191,33 @@ Las pruebas citadas pertenecen a [PermissionRequestTests](tests/TallerOs.UnitTes
 
 La última columna cuenta todos los casos fallidos de la suite con cada defecto, no solo la prueba citada. Las seis modificaciones compilaron y fueron detectadas en experimentos locales; después de restaurar cada una, los 44 casos volvieron a pasar. En los defectos 1 y 4 se modificaron las comprobaciones equivalentes de aplicación y dominio para reproducir el comportamiento solicitado; las demás validaciones se conservaron.
 
-**Estado de entrega:** todavía están pendientes las etiquetas `practica-2` y `practica-2-defecto-1` a `practica-2-defecto-6`. Los experimentos locales no sustituyen esas etiquetas. Cada commit de defecto debe tener como padre directo el commit de `practica-2`, modificar únicamente código de Gestión de permisos e indicar en su mensaje el archivo y la línea modificados. La revisión acumulada de Control de acceso pasó localmente con una base temporal y captura SMTP con STARTTLS: registro y activación, inicio y cierre de sesión, rechazo por rol y recuperación de contraseña. No se comprobó entrega a buzones externos. La comprobación final desde un clon limpio del punto de entrega sigue pendiente.
+### Entrega y comprobación de la Práctica 2
+
+El punto de entrega es `practica-2`, con el código correcto y los 44 casos aprobados. Las etiquetas `practica-2-defecto-1` a `practica-2-defecto-6` identifican los seis experimentos independientes de la tabla. Cada commit de defecto debe tener como padre directo el commit de `practica-2`, modificar únicamente código de Gestión de permisos e indicar en su mensaje el archivo y la línea modificados. No se encadenan defectos ni se incorporan sus cambios a `main`.
+
+Desde un clon con las etiquetas descargadas, comprueba la base:
+
+```powershell
+git checkout practica-2
+dotnet test TallerOs.slnx
+```
+
+Repite la comprobación con cada etiqueta de defecto, sustituyendo el número del ejemplo por 1 a 6:
+
+```powershell
+git rev-parse 'practica-2^{commit}'
+git rev-parse 'practica-2-defecto-1^'
+git diff --stat practica-2 practica-2-defecto-1
+git show -s --format=full practica-2-defecto-1
+git checkout practica-2-defecto-1
+dotnet test TallerOs.slnx
+```
+
+Los dos primeros comandos deben devolver el mismo commit. El diff debe contener solo código de Gestión de permisos y el mensaje debe identificar archivo y línea. Con cada defecto el comando de pruebas debe reportar al menos un caso fallido; un error de compilación no demuestra su detección. Vuelve a `practica-2` para usar la aplicación correcta. Los experimentos locales no sustituyen la publicación ni la verificación de las siete etiquetas.
+
+La revisión acumulada de Control de acceso pasó localmente con una base temporal y captura SMTP con STARTTLS: registro y activación, inicio y cierre de sesión, rechazo por rol y recuperación de contraseña. No se comprobó entrega a buzones externos. Para reproducir estos flujos, sigue las secciones de ejecución, envío de correo y API de este README con tu configuración SMTP.
+
+En Moodle se entrega la URL del repositorio y el nombre `practica-2`. El evaluador consulta también las seis etiquetas de defecto en ese repositorio; comprueba su disponibilidad remota antes de entregar.
 
 ## Asignación 2: Gestión de permisos
 
