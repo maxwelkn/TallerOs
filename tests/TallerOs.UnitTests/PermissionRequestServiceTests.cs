@@ -49,7 +49,7 @@ public sealed class PermissionRequestServiceTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task RD_06_StandardCannotResolveRequests(bool approve)
+    public async Task RF_GP_03_RF_GP_04_StandardCannotResolveRequests(bool approve)
     {
         var scenario = new Scenario(false);
         var request = scenario.AddRequest(Guid.NewGuid());
@@ -57,8 +57,28 @@ public sealed class PermissionRequestServiceTests
         var result = await scenario.Service.Resolve(request.Id, approve, "Motivo");
 
         Assert.Equal(Failure.Forbidden, result.Failure);
+        Assert.Null(result.Value);
         Assert.Equal(PermissionRequestStatus.Pending, request.Status);
+        Assert.Null(request.ResolverId);
+        Assert.Null(request.ResolvedUtc);
         Assert.Equal(0, scenario.Store.SaveCount);
+        Assert.False(await scenario.Access.HasPermission(request.RequesterId, request.Permission, default));
+    }
+
+    [Fact]
+    public async Task RF_GP_03_Approve_ReturnsAdministratorAndResolutionTime()
+    {
+        var scenario = new Scenario(true);
+        var administrator = scenario.Actor.Get()!.Id;
+        var request = scenario.AddRequest(Guid.NewGuid());
+
+        var result = await scenario.Service.Resolve(request.Id, true);
+
+        Assert.Equal(Failure.None, result.Failure);
+        Assert.Equal(administrator, result.Value!.ResolverId);
+        Assert.Equal(scenario.Clock.GetUtcNow(), result.Value.ResolvedUtc);
+        Assert.Equal(administrator, request.ResolverId);
+        Assert.Equal(scenario.Clock.GetUtcNow(), request.ResolvedUtc);
     }
 
     [Fact]
@@ -106,8 +126,47 @@ public sealed class PermissionRequestServiceTests
         var result = await scenario.Service.Resolve(request.Id, approve, "Motivo");
 
         Assert.Equal(Failure.Forbidden, result.Failure);
+        Assert.Null(result.Value);
         Assert.Equal(PermissionRequestStatus.Pending, request.Status);
+        Assert.Null(request.ResolverId);
+        Assert.Null(request.ResolvedUtc);
         Assert.Equal(0, scenario.Store.SaveCount);
+        Assert.False(await scenario.Access.HasPermission(request.RequesterId, request.Permission, default));
+    }
+
+    [Theory]
+    [InlineData(PermissionRequestStatus.Approved, false)]
+    [InlineData(PermissionRequestStatus.Approved, true)]
+    [InlineData(PermissionRequestStatus.Applied, false)]
+    [InlineData(PermissionRequestStatus.Applied, true)]
+    [InlineData(PermissionRequestStatus.Rejected, false)]
+    [InlineData(PermissionRequestStatus.Rejected, true)]
+    public async Task RF_GP_06_ResolveNonPendingRequest_PreservesResolution(
+        PermissionRequestStatus initial, bool approve)
+    {
+        var scenario = new Scenario(true);
+        var request = scenario.AddRequest(Guid.NewGuid());
+        var originalResolver = Guid.NewGuid();
+        var originalTime = scenario.Clock.GetUtcNow().AddMinutes(1);
+        if (initial == PermissionRequestStatus.Rejected)
+            request.Reject(originalResolver, originalTime, "Motivo original");
+        else
+        {
+            request.Approve(originalResolver, originalTime);
+            if (initial == PermissionRequestStatus.Applied) request.Apply();
+        }
+        var originalReason = request.RejectionReason;
+
+        var result = await scenario.Service.Resolve(request.Id, approve, "Nuevo motivo");
+
+        Assert.Equal(Failure.Conflict, result.Failure);
+        Assert.Null(result.Value);
+        Assert.Equal(initial, request.Status);
+        Assert.Equal(originalResolver, request.ResolverId);
+        Assert.Equal(originalTime, request.ResolvedUtc);
+        Assert.Equal(originalReason, request.RejectionReason);
+        Assert.Equal(0, scenario.Store.SaveCount);
+        Assert.False(await scenario.Access.HasPermission(request.RequesterId, request.Permission, default));
     }
 
     [Fact]
@@ -146,20 +205,31 @@ public sealed class PermissionRequestServiceTests
         Assert.Equal(Failure.None, result.Failure);
         Assert.Equal("Rejected", result.Value!.Status);
         Assert.Equal("No requerido", result.Value.RejectionReason);
+        Assert.Equal(scenario.Actor.Get()!.Id, result.Value.ResolverId);
+        Assert.Equal(scenario.Clock.GetUtcNow(), result.Value.ResolvedUtc);
+        Assert.Equal(1, scenario.Store.SaveCount);
         Assert.False(await scenario.Access.HasPermission(request.RequesterId, request.Permission, default));
     }
 
-    [Fact]
-    public async Task RF_GP_04_MissingReason_DoesNotSaveResolution()
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task RF_GP_04_MissingReason_DoesNotSaveResolution(string? reason)
     {
         var scenario = new Scenario(true);
         var request = scenario.AddRequest(Guid.NewGuid());
 
-        var result = await scenario.Service.Resolve(request.Id, false, "   ");
+        var result = await scenario.Service.Resolve(request.Id, false, reason);
 
         Assert.Equal(Failure.Invalid, result.Failure);
+        Assert.Null(result.Value);
         Assert.Equal(PermissionRequestStatus.Pending, request.Status);
+        Assert.Null(request.ResolverId);
+        Assert.Null(request.ResolvedUtc);
+        Assert.Null(request.RejectionReason);
         Assert.Equal(0, scenario.Store.SaveCount);
+        Assert.False(await scenario.Access.HasPermission(request.RequesterId, request.Permission, default));
     }
 
     [Fact]
@@ -169,6 +239,11 @@ public sealed class PermissionRequestServiceTests
         var pending = scenario.AddRequest(Guid.NewGuid());
         var rejected = scenario.AddRequest(Guid.NewGuid());
         rejected.Reject(scenario.Actor.Get()!.Id, scenario.Clock.GetUtcNow(), "Motivo");
+        var approved = scenario.AddRequest(Guid.NewGuid());
+        approved.Approve(scenario.Actor.Get()!.Id, scenario.Clock.GetUtcNow());
+        var applied = scenario.AddRequest(Guid.NewGuid());
+        applied.Approve(scenario.Actor.Get()!.Id, scenario.Clock.GetUtcNow());
+        applied.Apply();
 
         var result = await scenario.Service.List(true);
 

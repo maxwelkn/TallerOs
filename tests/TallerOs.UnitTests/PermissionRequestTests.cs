@@ -17,6 +17,8 @@ public sealed class PermissionRequestTests
         Assert.Equal(requester, request.RequesterId);
         Assert.Equal(Created, request.CreatedUtc);
         Assert.Null(request.ResolverId);
+        Assert.Null(request.ResolvedUtc);
+        Assert.Null(request.RejectionReason);
     }
 
     [Fact]
@@ -48,6 +50,22 @@ public sealed class PermissionRequestTests
         Assert.Equal(resolved, request.ResolvedUtc);
     }
 
+    [Fact]
+    public void RF_GP_05_ApplyApprovedRequest_PreservesResolution()
+    {
+        var request = NewRequest();
+        var administrator = Guid.NewGuid();
+        var resolved = Created.AddMinutes(1);
+        request.Approve(administrator, resolved);
+
+        request.Apply();
+
+        Assert.Equal(PermissionRequestStatus.Applied, request.Status);
+        Assert.Equal(administrator, request.ResolverId);
+        Assert.Equal(resolved, request.ResolvedUtc);
+        Assert.Null(request.RejectionReason);
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("")]
@@ -61,6 +79,7 @@ public sealed class PermissionRequestTests
         Assert.Equal(PermissionRequestStatus.Pending, request.Status);
         Assert.Null(request.ResolverId);
         Assert.Null(request.ResolvedUtc);
+        Assert.Null(request.RejectionReason);
     }
 
     [Fact]
@@ -103,6 +122,8 @@ public sealed class PermissionRequestTests
 
         Assert.Equal(PermissionRequestStatus.Pending, request.Status);
         Assert.Null(request.ResolverId);
+        Assert.Null(request.ResolvedUtc);
+        Assert.Null(request.RejectionReason);
     }
 
     [Theory]
