@@ -174,6 +174,25 @@ dotnet test TallerOs.slnx
 
 El comando restaura dependencias, compila los proyectos necesarios y ejecuta la suite xUnit de `tests/TallerOs.UnitTests`, sin iniciar la API, SQLite ni SMTP. Cada prueba prepara sus propios datos; las fases se distinguen por bloques en blanco y los nombres incluyen el requisito. Se comprueban estado y datos de resoluciones válidas, rechazo y conservación de datos ante operaciones prohibidas, permisos del actor, aislamiento de solicitudes y concesión automática. Las comprobaciones HTTP y de migraciones descritas abajo complementan la suite unitaria.
 
+## Defectos
+
+La Práctica 2 utiliza la variante B. Cada defecto se prueba por separado con el mismo comando de la sección **Pruebas**, sin modificar archivos de pruebas. La suite tiene 44 casos: con el código correcto todos pasan; con cada defecto debe fallar al menos uno por el comportamiento incorrecto.
+
+Las pruebas citadas pertenecen a [PermissionRequestTests](tests/TallerOs.UnitTests/PermissionRequestTests.cs) y [PermissionRequestServiceTests](tests/TallerOs.UnitTests/PermissionRequestServiceTests.cs). Los parámetros indicados identifican el caso concreto de cada prueba parametrizada.
+
+| Defecto B | Requisito | Prueba que lo detecta | Comportamiento que comprueba | Casos fallidos en el experimento local |
+| --- | --- | --- | --- | ---: |
+| 1. Aceptar un motivo vacío al rechazar | RF-GP-04 | `PermissionRequestServiceTests.RF_GP_04_MissingReason_DoesNotSaveResolution(reason: "")` | Rechazar con motivo vacío devuelve `Invalid`, conserva `Pending` y los datos de resolución vacíos, no guarda ni concede el permiso. | 4 |
+| 2. Permitir `Approved → Rejected` | RF-GP-06 | `PermissionRequestTests.RF_GP_06_ForbiddenOperation_PreservesRequest(initial: Approved, operation: "reject")` | Rechazar una solicitud aprobada lanza `PermissionRuleException` y conserva estado, responsable, fecha y motivo. | 2 |
+| 3. Permitir que un Estándar apruebe | RF-GP-03 | `PermissionRequestServiceTests.RF_GP_03_RF_GP_04_StandardCannotResolveRequests(approve: true)` | La aprobación como Estándar devuelve `Forbidden`; la solicitud sigue pendiente, sin resolución, guardado ni concesión. | 1 |
+| 4. Invertir la prohibición de resolver la solicitud propia | RF-GP-07 | `PermissionRequestServiceTests.RF_GP_07_PromotedRequesterCannotResolveOwnRequest(approve: true/false)` | Un Administrador no puede aprobar ni rechazar su propia solicitud: recibe `Forbidden`, conserva `Pending` y no guarda ni concede el permiso. | 31 |
+| 5. Permitir `Applied → Rejected` | RF-GP-06 | `PermissionRequestTests.RF_GP_06_ForbiddenOperation_PreservesRequest(initial: Applied, operation: "reject")` | Rechazar una solicitud aplicada lanza `PermissionRuleException` y conserva estado, responsable, fecha y motivo. | 2 |
+| 6. Omitir el responsable y la fecha al aprobar | RF-GP-03 | `PermissionRequestServiceTests.RF_GP_03_Approve_ReturnsAdministratorAndResolutionTime` | La aprobación conserva en la entidad y devuelve en el resultado el ID del Administrador y la fecha UTC del reloj de prueba. | 9 |
+
+La última columna cuenta todos los casos fallidos de la suite con cada defecto, no solo la prueba citada. Las seis modificaciones compilaron y fueron detectadas en experimentos locales; después de restaurar cada una, los 44 casos volvieron a pasar. En los defectos 1 y 4 se modificaron las comprobaciones equivalentes de aplicación y dominio para reproducir el comportamiento solicitado; las demás validaciones se conservaron.
+
+**Estado de entrega:** todavía están pendientes las etiquetas `practica-2` y `practica-2-defecto-1` a `practica-2-defecto-6`. Los experimentos locales no sustituyen esas etiquetas. Cada commit de defecto debe tener como padre directo el commit de `practica-2`, modificar únicamente código de Gestión de permisos e indicar en su mensaje el archivo y la línea modificados. La revisión acumulada de Control de acceso pasó localmente con una base temporal y captura SMTP con STARTTLS: registro y activación, inicio y cierre de sesión, rechazo por rol y recuperación de contraseña. No se comprobó entrega a buzones externos. La comprobación final desde un clon limpio del punto de entrega sigue pendiente.
+
 ## Asignación 2: Gestión de permisos
 
 Para estudiar el flujo y las decisiones de esta unidad, consulta la [guía de Gestión de permisos](docs/estudio-gestion-permisos.md).
