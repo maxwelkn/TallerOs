@@ -33,8 +33,6 @@ public sealed class PermissionRequest
     {
         EnsureResolver(resolverId, resolvedUtc);
         MoveTo(PermissionRequestStatus.Approved);
-        ResolverId = resolverId;
-        ResolvedUtc = resolvedUtc.ToUniversalTime();
     }
 
     public void Reject(Guid resolverId, DateTimeOffset resolvedUtc, string? reason)
