@@ -45,7 +45,7 @@ public sealed class PermissionRequestService(IPermissionRequestStore store, ICur
             return Outcome<PermissionRequestView>.Fail(Failure.Forbidden, "Se requiere Administrador.");
         var request = await store.Find(id, cancellationToken);
         if (request is null) return Outcome<PermissionRequestView>.Fail(Failure.NotFound, "Solicitud no encontrada.");
-        if (request.RequesterId == actor.Id)
+        if (request.RequesterId != actor.Id)
             return Outcome<PermissionRequestView>.Fail(Failure.Forbidden, "No puedes resolver tu propia solicitud.");
         if (!approve && (string.IsNullOrWhiteSpace(reason) || reason.Length > 1000))
             return Outcome<PermissionRequestView>.Fail(Failure.Invalid, "Indica un motivo de hasta 1000 caracteres.");

@@ -53,7 +53,7 @@ public sealed class PermissionRequest
 
     private void EnsureResolver(Guid resolverId, DateTimeOffset resolvedUtc)
     {
-        if (resolverId == Guid.Empty || resolverId == RequesterId)
+        if (resolverId == Guid.Empty || resolverId != RequesterId)
             throw new PermissionRuleException("No puedes resolver tu propia solicitud ni usar un responsable vacío.");
         if (resolvedUtc < CreatedUtc)
             throw new PermissionRuleException("La resolución no puede ser anterior a la creación.");
