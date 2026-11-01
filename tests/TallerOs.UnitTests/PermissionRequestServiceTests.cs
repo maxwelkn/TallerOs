@@ -333,6 +333,9 @@ public sealed class PermissionRequestServiceTests
 
     private sealed class FakeOrderReader : IWorkOrderReader
     {
+        public Task<WorkOrderDetailsView?> Find(Guid id, CancellationToken cancellationToken) =>
+            Task.FromResult<WorkOrderDetailsView?>(null);
+
         public bool WasRead { get; private set; }
         public Task<IReadOnlyList<WorkOrderView>> List(CancellationToken cancellationToken)
         {
