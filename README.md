@@ -311,7 +311,7 @@ Cada transición correcta devuelve 200. Si falta cualquiera de las dos confirmac
 - Las referencias inexistentes producen 404 y las transiciones incompatibles o sin condiciones producen 409. PowerShell muestra error ante esas respuestas esperadas: ejecútalas individualmente y revisa el código antes de seguir.
 - Para verificar RD-09 manualmente, detén la API, vuelve a iniciarla con la misma `DB_PATH` y consulta el detalle y los listados. Deben conservarse estado, diagnósticos y relaciones. Si la sesión venció, inicia sesión otra vez.
 
-La suite comprueba el cierre y reapertura de un archivo SQLite y los recorridos HTTP; no se presenta eso como la revisión acumulada final desde `practica-3`, que sigue pendiente.
+La suite comprueba el cierre y reapertura de un archivo SQLite y los recorridos HTTP. Además, se completó la [revisión acumulada desde un clon de GitHub de `practica-3`](docs/verificacion-practica-3.md), con datos ficticios, base temporal y captura SMTP local.
 
 ## Pruebas
 
@@ -346,7 +346,7 @@ Para ejecutar únicamente esta integración sin iniciar ningún proceso API:
 dotnet test tests/TallerOs.IntegrationTests/TallerOs.IntegrationTests.csproj --filter FullyQualifiedName~PermissionsWorkshopIntegrationTests
 ```
 
-El comando general `dotnet test TallerOs.slnx` también la ejecuta. Las aserciones anteriores a la aprobación exigen Forbidden y ausencia de datos: al quitar la consulta del permiso, la operación se permite y esos casos fallan. La sección Defectos documenta ese experimento. La revisión acumulada final de los cinco frentes desde un clon remoto de `practica-3` corresponde al incremento 6 y sigue pendiente.
+El comando general `dotnet test TallerOs.slnx` también la ejecuta. Las aserciones anteriores a la aprobación exigen Forbidden y ausencia de datos: al quitar la consulta del permiso, la operación se permite y esos casos fallan. La sección Defectos documenta ese experimento. El [informe del incremento 6](docs/verificacion-practica-3.md) registra la revisión acumulada de los cinco frentes desde un clon remoto de `practica-3`.
 
 ## Defectos
 
@@ -397,7 +397,7 @@ Se espera al menos una prueba fallida en cada variante, con los recuentos de la 
 
 ### Entrega de Práctica 3
 
-En Moodle se entrega la URL del repositorio y el nombre `practica-3`; las cuatro etiquetas de defecto se consultan en el mismo repositorio. Se evalúa el punto etiquetado, no el estado futuro de `main`. La disponibilidad remota de las cinco etiquetas debe verificarse antes de entregar. La revisión acumulada desde el README de registro/activación, login/logout, rechazo administrativo, recuperación y Gestión de permisos se realizará en el incremento 6; la detección de estos defectos no la sustituye.
+En Moodle se entrega la URL del repositorio y el nombre `practica-3`; las cuatro etiquetas de defecto se consultan en el mismo repositorio. Se evalúa el punto etiquetado, no el estado futuro de `main`. La disponibilidad remota de las cinco etiquetas y la revisión acumulada desde el README de registro/activación, login/logout, rechazo administrativo, recuperación y Gestión de permisos se comprobaron en el [incremento 6](docs/verificacion-practica-3.md). El informe se publicó después del punto de entrega, sin mover sus etiquetas. Conviene confirmar su disponibilidad al realizar la entrega manual.
 
 ## Defectos de la Práctica 2 (histórico)
 
