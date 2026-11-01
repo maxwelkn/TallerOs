@@ -47,6 +47,6 @@ Las dos tablas enumeran las 25 combinaciones de los cinco estados: cuatro permit
 
 `RF_NEG_05_DeliveredOrder_CannotLeaveTerminalState` intenta los cinco destinos desde Delivered. Las pruebas de condiciones verifican diagnóstico ausente, autorización no confirmada y cada combinación incompleta de confirmación de trabajo y entrega. Los rechazos conservan identidad, vehículo, motivo, estado y diagnósticos.
 
-Este incremento implementa y prueba el dominio; los endpoints operativos se incorporarán en los siguientes incrementos. El dominio no consulta cuentas ni roles: Application verificará el actor y el transporte aplicará Control de acceso. La columna de roles describe el contrato aprobado para esas operaciones, no una comprobación HTTP ya implementada.
+El dominio no consulta cuentas ni roles: Application verifica el actor y el transporte aplica Control de acceso. Los endpoints del incremento 3 están implementados y declarados en la política central. `POST /api/workshop/orders/{id}/transitions` recibe `status` y las confirmaciones de la tabla, delegando el cambio a `WorkOrderService` y al dominio. `WorkshopHttpTests` comprueba el acceso, el recorrido y los rechazos por HTTP; las pruebas unitarias de cada pareja siguen ejecutándose sin levantar la aplicación.
 
 Los nombres de estados y el esquema relacional existente se conservan. Los modelos persistentes del taller pasan a Domain, mientras el contexto EF compartido permanece en API como adaptación heredada.

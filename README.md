@@ -1,6 +1,6 @@
 # TallerOS
 
-Sistema de gestión para un solo taller de automóviles y motocicletas. Incluye Control de acceso, Gestión de permisos y el dominio y casos de uso del taller con pruebas unitarias y de persistencia. Las nuevas operaciones HTTP del taller están en desarrollo. La API usa C# y ASP.NET Core 10, Entity Framework Core y SQLite. React se incorporará en una etapa posterior.
+Sistema de gestión para un solo taller de automóviles y motocicletas. Incluye Control de acceso, Gestión de permisos y el dominio y casos de uso del taller con pruebas unitarias y de persistencia. Las operaciones HTTP del taller incluyen clientes, vehículos, órdenes, diagnósticos y avance de reparación con autorización en servidor. La API usa C# y ASP.NET Core 10, Entity Framework Core y SQLite. React se incorporará en una etapa posterior.
 
 ## Requisitos y ejecución desde un clon
 
@@ -164,7 +164,7 @@ Gestión de permisos está en `TallerOs.Domain/Permissions` y `TallerOs.Applicat
 
 `WorkOrder` es la entidad central del taller. `Customer`, `Vehicle`, `WorkOrder` y `Diagnosis` están en `src/TallerOs.Domain/Workshop` y conservan sus relaciones persistentes. `WorkOrderStatus` declara los cinco estados y `WorkOrderTransitions` centraliza las transiciones y condiciones. Consulta [las tablas completas](docs/maquina-de-estados.md): cuatro combinaciones permitidas y 21 prohibidas. `Delivered` es terminal y `Received → InRepair` está prohibida explícitamente.
 
-El incremento 1 de Práctica 3 implementa y prueba el dominio: diagnóstico registrado antes de marcar `Diagnosed`, confirmación del cliente para `Authorized` y confirmación de trabajo completado y entrega para `Delivered`. Registrar un diagnóstico no avanza el estado automáticamente. La consulta de órdenes existente se conserva. Los casos de uso y adaptadores del incremento 2 están implementados; sus operaciones HTTP nuevas y la prueba de integración real con Gestión de permisos se incorporarán en los siguientes incrementos.
+El incremento 1 de Práctica 3 implementa y prueba el dominio: diagnóstico registrado antes de marcar `Diagnosed`, confirmación del cliente para `Authorized` y confirmación de trabajo completado y entrega para `Delivered`. Registrar un diagnóstico no avanza el estado automáticamente. La consulta de órdenes existente se conserva. Los casos de uso, adaptadores y operaciones HTTP de los incrementos 2 y 3 están implementados. La prueba de integración real con Gestión de permisos, sin levantar la aplicación, corresponde al incremento 4.
 
 ### Práctica 3: casos de uso y persistencia (incremento 2)
 
@@ -179,13 +179,139 @@ Los casos de uso del taller están en `src/TallerOs.Application/Workshop`; los a
 | `WorkOrderService.Transition` | Actor válido y estado reconocido; reglas centralizadas en Domain | Detalle actualizado o conflicto |
 | `WorkOrderQuery.List` / `Find` | Administrador o Estándar con `WorkOrders.Read` | Lista existente o detalle con diagnósticos |
 
-Se admiten estados por nombre, sin distinguir mayúsculas y recortando espacios exteriores; no se aceptan códigos numéricos ni estados de Gestión de permisos. Un identificador vacío o texto obligatorio ausente produce `Invalid`; una referencia válida inexistente, `NotFound`; una condición de transición incumplida o un conflicto esperado de almacenamiento, `Conflict`. La traducción HTTP de las nuevas operaciones corresponde al incremento 3.
+Se admiten estados por nombre, sin distinguir mayúsculas y recortando espacios exteriores; no se aceptan códigos numéricos ni estados de Gestión de permisos. Un identificador vacío o texto obligatorio ausente produce `Invalid`; una referencia válida inexistente, `NotFound`; una condición de transición incumplida o un conflicto esperado de almacenamiento, `Conflict`. Los endpoints del incremento 3 traducen esos resultados a 400, 404 y 409, respectivamente.
 
 `WorkOrderStore.Find` carga los diagnósticos para que la condición `Received → Diagnosed` use datos persistidos. La aplicación genera los identificadores de las entidades del taller; el mapeo EF declara `ValueGeneratedNever` para insertar correctamente diagnósticos agregados a órdenes existentes. El estado de la orden es token de concurrencia: una transición basada en un estado obsoleto no sobrescribe otra ya guardada. Los conflictos no se reintentan automáticamente; se debe consultar en una nueva petición.
 
 No cambian tablas, relaciones ni valores persistidos de estados. La suite verifica que no hay cambios pendientes de esquema ni migraciones pendientes sobre una base temporal creada con las migraciones existentes. No se elimina la base habitual ni se incorpora un motor nuevo.
 
-Las pruebas de este incremento ejercitan los casos sin servidor. Su presencia no significa que ya estén disponibles las rutas HTTP nuevas ni que esté completada la integración real de permisos exigida por la Práctica 3.
+Las pruebas de persistencia ejercitan los casos sin servidor. Las rutas HTTP ya están conectadas y se comprueban por separado; la prueba sin servidor que integra realmente Gestión de permisos con el taller sigue pendiente del incremento 4.
+
+## Operaciones HTTP del taller (incremento 3)
+
+Todas las rutas siguientes se declaran en `AccessAuthorization.cs`. Exigen sesión válida y rol Estándar o Administrador. Los endpoints llaman a Application y no usan `DbContext` ni deciden transiciones.
+
+| Método y ruta | Entrada JSON | Resultado correcto |
+| --- | --- | --- |
+| `POST /api/workshop/customers` | `name`, `phone` | 201; cliente creado |
+| `GET /api/workshop/customers` | — | 200; lista de clientes |
+| `POST /api/workshop/vehicles` | `customerId`, `licensePlate`, `description` | 201; vehículo asociado a cliente existente |
+| `GET /api/workshop/vehicles` | — | 200; lista de vehículos |
+| `POST /api/workshop/orders` | `vehicleId`, `reason` | 201; orden en Received |
+| `GET /api/workshop/orders` | — | 200; lista de órdenes |
+| `GET /api/workshop/orders/{id}` | — | 200; detalle y diagnósticos |
+| `POST /api/workshop/orders/{id}/diagnoses` | `description` | 201; diagnóstico sin cambiar estado |
+| `POST /api/workshop/orders/{id}/transitions` | `status` y confirmaciones según destino | 200; detalle actualizado |
+
+Las dos consultas de órdenes requieren además `WorkOrders.Read` si el actor es Estándar. El Administrador puede consultarlas sin esa concesión. Las demás operaciones del taller no requieren ese permiso de lectura. Los códigos 201 incluyen Location hacia la colección de clientes/vehículos o el detalle de la orden, según el caso.
+
+### Preparación para probar funcionalidades por separado
+
+Arranca la API siguiendo la sección inicial y usa cuentas activadas. Para demostrar la concesión, prepara una cuenta Estándar que todavía no tenga `WorkOrders.Read` y un Administrador diferente. En una base de demostración separada, usa la misma `DB_PATH` para API y comandos; no borres la base habitual. El correo de activación se obtiene mediante el flujo ya documentado de envío o, para pruebas locales sin SMTP, leyendo el enlace de la cola con un visor SQLite.
+
+En PowerShell, desde la raíz, prepara las sesiones sin escribir contraseñas en los comandos:
+
+```powershell
+$base = 'http://localhost:5000'
+function New-WorkshopSession {
+    param([string]$Email)
+    $securePassword = Read-Host 'Contraseña de esta cuenta' -AsSecureString
+    $body = @{
+        email = $Email
+        password = [System.Net.NetworkCredential]::new('', $securePassword).Password
+    } | ConvertTo-Json
+    $session = Invoke-RestMethod "$base/api/access/login" -Method Post -ContentType 'application/json' -Body $body
+    @{ Authorization = "Bearer $($session.token)" }
+}
+$operatorHeaders = New-WorkshopSession (Read-Host 'Correo de la cuenta Estándar')
+$adminHeaders = New-WorkshopSession (Read-Host 'Correo del Administrador')
+```
+
+Cada funcionalidad puede probarse con datos existentes: crear cliente solo necesita sesión; registrar vehículo necesita un cliente; recibir orden necesita un vehículo; registrar diagnóstico o cambiar estado necesita una orden en el estado indicado. Los listados permiten obtener los identificadores. Las pruebas automatizadas preparan sus propios datos y no dependen de ejecutar otra prueba primero.
+
+Los ejemplos siguientes muestran también cómo preparar esos datos desde cero. Son datos ficticios de demostración.
+
+### Registrar y consultar clientes
+
+```powershell
+$customerBody = @{ name = 'Cliente de demostración'; phone = '8090000000' } | ConvertTo-Json
+$customer = Invoke-RestMethod "$base/api/workshop/customers" -Method Post -Headers $operatorHeaders -ContentType 'application/json' -Body $customerBody
+Invoke-RestMethod "$base/api/workshop/customers" -Headers $operatorHeaders
+```
+
+La creación devuelve 201 y la consulta 200. Nombre y teléfono son obligatorios. Para probar solo el registro de vehículos puedes obtener un cliente de este listado y usar su ID sin crear uno nuevo.
+
+### Registrar y consultar vehículos
+
+```powershell
+$vehicleBody = @{ customerId = $customer.id; licensePlate = 'PRUEBA-1'; description = 'Motocicleta de demostración' } | ConvertTo-Json
+$vehicle = Invoke-RestMethod "$base/api/workshop/vehicles" -Method Post -Headers $operatorHeaders -ContentType 'application/json' -Body $vehicleBody
+Invoke-RestMethod "$base/api/workshop/vehicles" -Headers $operatorHeaders
+```
+
+Se espera 201 con la relación al cliente y 200 al listar. Un `customerId` con GUID válido inexistente produce 404; un GUID vacío, placa vacía o descripción ausente produce 400. No se exige un formato internacional específico de teléfono ni se declara unicidad de placa en este alcance.
+
+### Recibir una orden
+
+```powershell
+$orderBody = @{ vehicleId = $vehicle.id; reason = 'Ruido en el motor' } | ConvertTo-Json
+$order = Invoke-RestMethod "$base/api/workshop/orders" -Method Post -Headers $operatorHeaders -ContentType 'application/json' -Body $orderBody
+Invoke-RestMethod "$base/api/workshop/orders/$($order.id)" -Headers $adminHeaders
+```
+
+La recepción devuelve 201, estado Received y diagnósticos vacíos. El detalle, leído aquí como Administrador, devuelve 200. Un vehículo inexistente produce 404 y un motivo vacío produce 400.
+
+### Consultar mediante un permiso aprobado
+
+Ejecuta primero la consulta como Estándar sin permiso: debe devolver 403. Después crea y aprueba su solicitud:
+
+```powershell
+Invoke-RestMethod "$base/api/workshop/orders" -Headers $operatorHeaders
+$permissionBody = @{ permission = 'WorkOrders.Read' } | ConvertTo-Json
+$permissionRequest = Invoke-RestMethod "$base/api/permissions/requests" -Method Post -Headers $operatorHeaders -ContentType 'application/json' -Body $permissionBody
+Invoke-RestMethod "$base/api/permissions/requests/$($permissionRequest.id)/approve" -Method Post -Headers $adminHeaders
+Invoke-RestMethod "$base/api/workshop/orders" -Headers $operatorHeaders
+Invoke-RestMethod "$base/api/workshop/orders/$($order.id)" -Headers $operatorHeaders
+```
+
+Las consultas posteriores devuelven 200 con la misma sesión Estándar; su rol no cambia. Si la cuenta ya tiene el permiso, la creación de solicitud devuelve 409: usa otra cuenta sin concesión para repetir la demostración completa. Una lista vacía autorizada sigue siendo 200.
+
+### Registrar diagnóstico y marcar Diagnosed
+
+Desde Received, intentar Diagnosed sin diagnóstico debe devolver 409. Ejecuta esa comprobación negativa individualmente antes del registro:
+
+```powershell
+Invoke-RestMethod "$base/api/workshop/orders/$($order.id)/transitions" -Method Post -Headers $operatorHeaders -ContentType 'application/json' -Body '{"status":"Diagnosed"}'
+$diagnosisBody = @{ description = 'Revisar transmisión' } | ConvertTo-Json
+Invoke-RestMethod "$base/api/workshop/orders/$($order.id)/diagnoses" -Method Post -Headers $operatorHeaders -ContentType 'application/json' -Body $diagnosisBody
+Invoke-RestMethod "$base/api/workshop/orders/$($order.id)" -Headers $adminHeaders
+Invoke-RestMethod "$base/api/workshop/orders/$($order.id)/transitions" -Method Post -Headers $operatorHeaders -ContentType 'application/json' -Body '{"status":"Diagnosed"}'
+```
+
+El diagnóstico devuelve 201 y el detalle intermedio todavía muestra Received. Solo la transición posterior devuelve 200 con Diagnosed. Para comprobar la prohibición explícita, intenta `{"status":"InRepair"}` sobre otra orden Received: se espera 409 y que permanezca Received.
+
+### Autorizar, iniciar reparación y entregar
+
+Con la orden en Diagnosed, probar Authorized sin confirmar al cliente produce 409. El recorrido correcto es:
+
+```powershell
+Invoke-RestMethod "$base/api/workshop/orders/$($order.id)/transitions" -Method Post -Headers $operatorHeaders -ContentType 'application/json' -Body '{"status":"Authorized","customerAuthorizationConfirmed":true}'
+Invoke-RestMethod "$base/api/workshop/orders/$($order.id)/transitions" -Method Post -Headers $operatorHeaders -ContentType 'application/json' -Body '{"status":"InRepair"}'
+Invoke-RestMethod "$base/api/workshop/orders/$($order.id)/transitions" -Method Post -Headers $operatorHeaders -ContentType 'application/json' -Body '{"status":"Delivered","workCompletionConfirmed":true,"deliveryConfirmed":true}'
+Invoke-RestMethod "$base/api/workshop/orders/$($order.id)" -Headers $adminHeaders
+```
+
+Cada transición correcta devuelve 200. Si falta cualquiera de las dos confirmaciones para entregar, devuelve 409 y conserva InRepair. Desde Delivered, intentar Received o cualquier otro destino devuelve 409 sin alterar el estado ni los diagnósticos. Las confirmaciones que no se envían valen false; no son códigos de permisos ni importes de cotización.
+
+### Seguridad, errores y persistencia
+
+- Invocar cualquiera de las nueve rutas sin Bearer válido produce 401. También se rechazan sesiones desconocidas, vencidas o revocadas y cuentas deshabilitadas.
+- Estándar sin permiso recibe 403 en consultas de órdenes y al invocar una ruta administrativa. Estándar y Administrador pueden realizar las operaciones operativas.
+- JSON mal formado, campos de tipo incorrecto, identificadores vacíos y estados como `"1"` o `"Pending"` producen 400. Un GUID mal formado en una ruta con `{id:guid}` no coincide con ella y produce 404.
+- Las referencias inexistentes producen 404 y las transiciones incompatibles o sin condiciones producen 409. PowerShell muestra error ante esas respuestas esperadas: ejecútalas individualmente y revisa el código antes de seguir.
+- Para verificar RD-09 manualmente, detén la API, vuelve a iniciarla con la misma `DB_PATH` y consulta el detalle y los listados. Deben conservarse estado, diagnósticos y relaciones. Si la sesión venció, inicia sesión otra vez.
+
+La suite comprueba el cierre y reapertura de un archivo SQLite y los recorridos HTTP; no se presenta eso como la revisión acumulada final desde `practica-3`, que sigue pendiente.
 
 ## Pruebas
 
@@ -195,7 +321,15 @@ Desde la raíz de un clon con el SDK de .NET 10 y acceso a NuGet:
 dotnet test TallerOs.slnx
 ```
 
-El comando restaura dependencias, compila y ejecuta las suites xUnit de la solución. `tests/TallerOs.UnitTests` prueba dominio y aplicación con dobles, sin iniciar API, SQLite ni SMTP. `tests/TallerOs.IntegrationTests` comprueba por ahora la persistencia del taller con casos y adaptadores reales, SQLite en memoria y un archivo temporal para verificar cierre y reapertura; no inicia la API ni envía correos. La integración entre Gestión de permisos y el taller se añadirá en el incremento 4: estas pruebas de persistencia no la sustituyen. Cada prueba prepara sus propios datos; las fases se distinguen por bloques en blanco y los nombres incluyen el requisito. Se comprueban estado y datos de resoluciones válidas, rechazo y conservación de datos ante operaciones prohibidas, permisos del actor, aislamiento de solicitudes y concesión automática. La suite del taller añade `WorkOrderTests` y `WorkshopCreationTests`: cada pareja de estados se prueba mediante operaciones reales del dominio, además de las condiciones incumplidas, el estado terminal, la conservación de datos y la creación válida de sus entidades. `WorkshopServiceTests` verifica además autorizaciones, entradas inválidas, referencias inexistentes, resultados y ausencia de guardado ante rechazos. `WorkshopPersistenceTests` cubre el flujo completo entre contextos, concurrencia, rechazo de relaciones inválidas por SQLite, conservación de estado tras rechazo, compatibilidad del modelo y persistencia al cerrar y reabrir el archivo. Las comprobaciones HTTP descritas abajo complementan estas suites y siguen pendientes para las nuevas rutas.
+El comando restaura dependencias, compila y ejecuta todas las suites de la solución:
+
+- `TallerOs.UnitTests`: dominio y aplicación con dobles, sin API, SQLite ni SMTP. `WorkOrderTests` cubre cada fila de transiciones y el terminal; `WorkshopServiceTests` cubre identidad, permisos, validación, referencias, resultados y ausencia de guardado ante rechazos.
+- `WorkshopPersistenceTests`, en `TallerOs.IntegrationTests`: casos y adaptadores reales del taller con SQLite temporal, sin API ni SMTP. Comprueba flujo entre contextos, concurrencia y rollback, FK inválida, conservación tras un rechazo, compatibilidad de modelo y cierre/reapertura del archivo.
+- `WorkshopHttpTests`, en el mismo proyecto: inicia automáticamente una API real en un proceso hijo oculto, un puerto local libre y una base temporal. Prepara cuentas ficticias y sesiones, realiza login HTTP y comprueba las nueve rutas, ambos roles, permisos de lectura, entradas inválidas, estados y terminal. Al terminar detiene su proceso y elimina sus archivos temporales; no usa tu base ni envía correo.
+
+La suite de estados se mantiene independiente del servidor. Para ejecutarla por separado: `dotnet test tests/TallerOs.UnitTests/TallerOs.UnitTests.csproj --filter FullyQualifiedName~WorkOrderTests`. El comando de la solución incluye también las comprobaciones HTTP, por lo que el equipo debe permitir iniciar procesos `dotnet` y escuchar en loopback; no necesitas arrancar la API manualmente.
+
+Cada prueba prepara los datos necesarios sin depender de otra prueba. Las fases se distinguen por bloques y los nombres identifican los requisitos. El fixture HTTP prepara concesiones de prueba directamente: no demuestra todavía la prueba sin servidor que crea y aprueba una solicitud con Gestión de permisos real. Esa integración del incremento 4 y los cuatro experimentos de defectos de Práctica 3 siguen pendientes.
 
 ## Defectos
 
