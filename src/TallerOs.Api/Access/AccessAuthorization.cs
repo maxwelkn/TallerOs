@@ -28,6 +28,8 @@ public static class AccessAuthorization
             [("GET", "/api/permissions/requests/pending")] = UserRole.Administrator,
             [("POST", "/api/permissions/requests/{id:guid}/approve")] = UserRole.Administrator,
             [("POST", "/api/permissions/requests/{id:guid}/reject")] = UserRole.Administrator,
+            [("POST", "/api/workshop/customers")] = UserRole.Standard,
+            [("GET", "/api/workshop/customers")] = UserRole.Standard,
             [("GET", "/api/workshop/orders")] = UserRole.Standard
         };
 
