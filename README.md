@@ -1,6 +1,6 @@
 # TallerOS
 
-Sistema de gestión para un solo taller de automóviles y motocicletas. Incluye Control de acceso, Gestión de permisos con pruebas unitarias y la estructura de estados de la orden de reparación. La API usa C# y ASP.NET Core 10, Entity Framework Core y SQLite. React se incorporará en una etapa posterior.
+Sistema de gestión para un solo taller de automóviles y motocicletas. Incluye Control de acceso, Gestión de permisos y el dominio y casos de uso del taller con pruebas unitarias y de persistencia. Las nuevas operaciones HTTP del taller están en desarrollo. La API usa C# y ASP.NET Core 10, Entity Framework Core y SQLite. React se incorporará en una etapa posterior.
 
 ## Requisitos y ejecución desde un clon
 
@@ -144,7 +144,7 @@ flowchart LR
         Auditoria[Auditoría: prevista]
     end
     subgraph Negocio[Módulo del taller]
-        Taller[Taller: órdenes y consulta protegida]
+        Taller[Taller: casos de clientes, vehículos, órdenes y diagnósticos; consulta protegida]
     end
     Taller -->|consulta identidad y permiso| Acceso
     Permisos -->|obtiene actor y concede acceso| Acceso
@@ -164,7 +164,28 @@ Gestión de permisos está en `TallerOs.Domain/Permissions` y `TallerOs.Applicat
 
 `WorkOrder` es la entidad central del taller. `Customer`, `Vehicle`, `WorkOrder` y `Diagnosis` están en `src/TallerOs.Domain/Workshop` y conservan sus relaciones persistentes. `WorkOrderStatus` declara los cinco estados y `WorkOrderTransitions` centraliza las transiciones y condiciones. Consulta [las tablas completas](docs/maquina-de-estados.md): cuatro combinaciones permitidas y 21 prohibidas. `Delivered` es terminal y `Received → InRepair` está prohibida explícitamente.
 
-El incremento 1 de Práctica 3 implementa y prueba el dominio: diagnóstico registrado antes de marcar `Diagnosed`, confirmación del cliente para `Authorized` y confirmación de trabajo completado y entrega para `Delivered`. Registrar un diagnóstico no avanza el estado automáticamente. Las operaciones HTTP nuevas y la prueba de integración real se incorporarán en los siguientes incrementos; la consulta de órdenes existente se conserva.
+El incremento 1 de Práctica 3 implementa y prueba el dominio: diagnóstico registrado antes de marcar `Diagnosed`, confirmación del cliente para `Authorized` y confirmación de trabajo completado y entrega para `Delivered`. Registrar un diagnóstico no avanza el estado automáticamente. La consulta de órdenes existente se conserva. Los casos de uso y adaptadores del incremento 2 están implementados; sus operaciones HTTP nuevas y la prueba de integración real con Gestión de permisos se incorporarán en los siguientes incrementos.
+
+### Práctica 3: casos de uso y persistencia (incremento 2)
+
+Los casos de uso del taller están en `src/TallerOs.Application/Workshop`; los adaptadores EF están en `src/TallerOs.Api/Infrastructure/Workshop`. La API registra sus dependencias en `Program.cs`. El contexto compartido sigue siendo una adaptación heredada; no se afirma que la separación completa de Infrastructure esté terminada.
+
+| Caso de uso | Comprobación de aplicación | Resultado |
+| --- | --- | --- |
+| `CustomerService.Create` / `List` | Actor válido y datos obligatorios al crear | Vista de cliente / lista |
+| `VehicleService.Create` / `List` | Actor válido; cliente existente al crear | Vista de vehículo / lista |
+| `WorkOrderService.Receive` | Actor válido, vehículo existente y motivo | Orden `Received` sin diagnósticos |
+| `WorkOrderService.AddDiagnosis` | Actor válido, orden existente y descripción | Diagnóstico guardado; no avanza estado |
+| `WorkOrderService.Transition` | Actor válido y estado reconocido; reglas centralizadas en Domain | Detalle actualizado o conflicto |
+| `WorkOrderQuery.List` / `Find` | Administrador o Estándar con `WorkOrders.Read` | Lista existente o detalle con diagnósticos |
+
+Se admiten estados por nombre, sin distinguir mayúsculas y recortando espacios exteriores; no se aceptan códigos numéricos ni estados de Gestión de permisos. Un identificador vacío o texto obligatorio ausente produce `Invalid`; una referencia válida inexistente, `NotFound`; una condición de transición incumplida o un conflicto esperado de almacenamiento, `Conflict`. La traducción HTTP de las nuevas operaciones corresponde al incremento 3.
+
+`WorkOrderStore.Find` carga los diagnósticos para que la condición `Received → Diagnosed` use datos persistidos. La aplicación genera los identificadores de las entidades del taller; el mapeo EF declara `ValueGeneratedNever` para insertar correctamente diagnósticos agregados a órdenes existentes. El estado de la orden es token de concurrencia: una transición basada en un estado obsoleto no sobrescribe otra ya guardada. Los conflictos no se reintentan automáticamente; se debe consultar en una nueva petición.
+
+No cambian tablas, relaciones ni valores persistidos de estados. La suite verifica que no hay cambios pendientes de esquema ni migraciones pendientes sobre una base temporal creada con las migraciones existentes. No se elimina la base habitual ni se incorpora un motor nuevo.
+
+Las pruebas de este incremento ejercitan los casos sin servidor. Su presencia no significa que ya estén disponibles las rutas HTTP nuevas ni que esté completada la integración real de permisos exigida por la Práctica 3.
 
 ## Pruebas
 
@@ -174,7 +195,7 @@ Desde la raíz de un clon con el SDK de .NET 10 y acceso a NuGet:
 dotnet test TallerOs.slnx
 ```
 
-El comando restaura dependencias, compila los proyectos necesarios y ejecuta la suite xUnit de `tests/TallerOs.UnitTests`, sin iniciar la API, SQLite ni SMTP. Cada prueba prepara sus propios datos; las fases se distinguen por bloques en blanco y los nombres incluyen el requisito. Se comprueban estado y datos de resoluciones válidas, rechazo y conservación de datos ante operaciones prohibidas, permisos del actor, aislamiento de solicitudes y concesión automática. La suite del taller añade `WorkOrderTests` y `WorkshopCreationTests`: cada pareja de estados se prueba mediante operaciones reales del dominio, además de las condiciones incumplidas, el estado terminal, la conservación de datos y la creación válida de sus entidades. Las comprobaciones HTTP y de migraciones descritas abajo complementan la suite unitaria.
+El comando restaura dependencias, compila y ejecuta las suites xUnit de la solución. `tests/TallerOs.UnitTests` prueba dominio y aplicación con dobles, sin iniciar API, SQLite ni SMTP. `tests/TallerOs.IntegrationTests` comprueba por ahora la persistencia del taller con casos y adaptadores reales, SQLite en memoria y un archivo temporal para verificar cierre y reapertura; no inicia la API ni envía correos. La integración entre Gestión de permisos y el taller se añadirá en el incremento 4: estas pruebas de persistencia no la sustituyen. Cada prueba prepara sus propios datos; las fases se distinguen por bloques en blanco y los nombres incluyen el requisito. Se comprueban estado y datos de resoluciones válidas, rechazo y conservación de datos ante operaciones prohibidas, permisos del actor, aislamiento de solicitudes y concesión automática. La suite del taller añade `WorkOrderTests` y `WorkshopCreationTests`: cada pareja de estados se prueba mediante operaciones reales del dominio, además de las condiciones incumplidas, el estado terminal, la conservación de datos y la creación válida de sus entidades. `WorkshopServiceTests` verifica además autorizaciones, entradas inválidas, referencias inexistentes, resultados y ausencia de guardado ante rechazos. `WorkshopPersistenceTests` cubre el flujo completo entre contextos, concurrencia, rechazo de relaciones inválidas por SQLite, conservación de estado tras rechazo, compatibilidad del modelo y persistencia al cerrar y reabrir el archivo. Las comprobaciones HTTP descritas abajo complementan estas suites y siguen pendientes para las nuevas rutas.
 
 ## Defectos
 
