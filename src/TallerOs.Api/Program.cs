@@ -88,5 +88,6 @@ app.MapPasswordEndpoints();
 app.MapAdminEndpoints();
 app.MapPermissionEndpoints();
 app.MapCustomerEndpoints();
+app.MapVehicleEndpoints();
 app.MapWorkOrderEndpoints();
 await app.RunAsync();
