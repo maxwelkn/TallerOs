@@ -162,7 +162,9 @@ Gestión de permisos está en `TallerOs.Domain/Permissions` y `TallerOs.Applicat
 
 ## Máquina de estados del negocio
 
-`WorkOrder` es la entidad central del taller. `Customer`, `Vehicle`, `WorkOrder` y `Diagnosis` están relacionados en el modelo persistente. Los cinco estados y las transiciones se declaran en `src/TallerOs.Api/Workshop/WorkOrder.cs`. Consulta [la tabla de transiciones](docs/maquina-de-estados.md). `Delivered` es terminal y `Received → InRepair` está prohibida explícitamente. Esta práctica no exige todavía las pruebas de la máquina.
+`WorkOrder` es la entidad central del taller. `Customer`, `Vehicle`, `WorkOrder` y `Diagnosis` están en `src/TallerOs.Domain/Workshop` y conservan sus relaciones persistentes. `WorkOrderStatus` declara los cinco estados y `WorkOrderTransitions` centraliza las transiciones y condiciones. Consulta [las tablas completas](docs/maquina-de-estados.md): cuatro combinaciones permitidas y 21 prohibidas. `Delivered` es terminal y `Received → InRepair` está prohibida explícitamente.
+
+El incremento 1 de Práctica 3 implementa y prueba el dominio: diagnóstico registrado antes de marcar `Diagnosed`, confirmación del cliente para `Authorized` y confirmación de trabajo completado y entrega para `Delivered`. Registrar un diagnóstico no avanza el estado automáticamente. Las operaciones HTTP nuevas y la prueba de integración real se incorporarán en los siguientes incrementos; la consulta de órdenes existente se conserva.
 
 ## Pruebas
 
@@ -172,11 +174,11 @@ Desde la raíz de un clon con el SDK de .NET 10 y acceso a NuGet:
 dotnet test TallerOs.slnx
 ```
 
-El comando restaura dependencias, compila los proyectos necesarios y ejecuta la suite xUnit de `tests/TallerOs.UnitTests`, sin iniciar la API, SQLite ni SMTP. Cada prueba prepara sus propios datos; las fases se distinguen por bloques en blanco y los nombres incluyen el requisito. Se comprueban estado y datos de resoluciones válidas, rechazo y conservación de datos ante operaciones prohibidas, permisos del actor, aislamiento de solicitudes y concesión automática. Las comprobaciones HTTP y de migraciones descritas abajo complementan la suite unitaria.
+El comando restaura dependencias, compila los proyectos necesarios y ejecuta la suite xUnit de `tests/TallerOs.UnitTests`, sin iniciar la API, SQLite ni SMTP. Cada prueba prepara sus propios datos; las fases se distinguen por bloques en blanco y los nombres incluyen el requisito. Se comprueban estado y datos de resoluciones válidas, rechazo y conservación de datos ante operaciones prohibidas, permisos del actor, aislamiento de solicitudes y concesión automática. La suite del taller añade `WorkOrderTests` y `WorkshopCreationTests`: cada pareja de estados se prueba mediante operaciones reales del dominio, además de las condiciones incumplidas, el estado terminal, la conservación de datos y la creación válida de sus entidades. Las comprobaciones HTTP y de migraciones descritas abajo complementan la suite unitaria.
 
 ## Defectos
 
-La Práctica 2 utiliza la variante B. Cada defecto se prueba por separado con el mismo comando de la sección **Pruebas**, sin modificar archivos de pruebas. La suite tiene 44 casos: con el código correcto todos pasan; con cada defecto debe fallar al menos uno por el comportamiento incorrecto.
+La Práctica 2 utiliza la variante B. Cada defecto se prueba por separado con el mismo comando de la sección **Pruebas**, sin modificar archivos de pruebas. La suite de permisos de la Práctica 2 tiene 44 casos: con el código correcto todos pasan; con cada defecto debe fallar al menos uno por el comportamiento incorrecto.
 
 Las pruebas citadas pertenecen a [PermissionRequestTests](tests/TallerOs.UnitTests/PermissionRequestTests.cs) y [PermissionRequestServiceTests](tests/TallerOs.UnitTests/PermissionRequestServiceTests.cs). Los parámetros indicados identifican el caso concreto de cada prueba parametrizada.
 
