@@ -13,8 +13,6 @@ public static class WorkOrderTransitions
     {
         if (!IsAllowed(from, to))
             throw new WorkshopRuleException($"Transición de {from} a {to} no permitida.");
-        if (to == WorkOrderStatus.Diagnosed && !hasDiagnosis)
-            throw new WorkshopRuleException("Registra un diagnóstico antes de avanzar la orden.");
         if (to == WorkOrderStatus.Authorized && !customerAuthorizationConfirmed)
             throw new WorkshopRuleException("Confirma la autorización del cliente antes de avanzar la orden.");
         if (to == WorkOrderStatus.Delivered && (!workCompletionConfirmed || !deliveryConfirmed))
