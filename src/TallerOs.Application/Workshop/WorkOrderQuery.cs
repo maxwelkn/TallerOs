@@ -40,8 +40,6 @@ public sealed class WorkOrderQuery(ICurrentActor currentActor, IAccessPermission
         var actor = currentActor.Get();
         if (actor is null || actor.Id == Guid.Empty)
             return (Failure.Unauthorized, "Inicia sesión.");
-        if (!actor.IsAdministrator && !await access.HasPermission(actor.Id, ReadPermission, cancellationToken))
-            return (Failure.Forbidden, "Se requiere el permiso WorkOrders.Read.");
         return (Failure.None, "");
     }
 }
