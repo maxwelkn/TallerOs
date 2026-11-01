@@ -28,7 +28,15 @@ public static class AccessAuthorization
             [("GET", "/api/permissions/requests/pending")] = UserRole.Administrator,
             [("POST", "/api/permissions/requests/{id:guid}/approve")] = UserRole.Administrator,
             [("POST", "/api/permissions/requests/{id:guid}/reject")] = UserRole.Administrator,
-            [("GET", "/api/workshop/orders")] = UserRole.Standard
+            [("POST", "/api/workshop/customers")] = UserRole.Standard,
+            [("GET", "/api/workshop/customers")] = UserRole.Standard,
+            [("POST", "/api/workshop/vehicles")] = UserRole.Standard,
+            [("GET", "/api/workshop/vehicles")] = UserRole.Standard,
+            [("POST", "/api/workshop/orders")] = UserRole.Standard,
+            [("GET", "/api/workshop/orders")] = UserRole.Standard,
+            [("GET", "/api/workshop/orders/{id:guid}")] = UserRole.Standard,
+            [("POST", "/api/workshop/orders/{id:guid}/diagnoses")] = UserRole.Standard,
+            [("POST", "/api/workshop/orders/{id:guid}/transitions")] = UserRole.Standard
         };
 
     public static WebApplication UseAccessAuthorization(this WebApplication app)

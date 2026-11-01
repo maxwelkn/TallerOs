@@ -1,5 +1,5 @@
 using Microsoft.EntityFrameworkCore;
-using TallerOs.Api.Workshop;
+using TallerOs.Domain.Workshop;
 using TallerOs.Api.Infrastructure.Access;
 using TallerOs.Domain.Permissions;
 
@@ -91,9 +91,19 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         model.Entity<RecoveryCode>().HasIndex(x => x.CodeHash).IsUnique();
         model.Entity<UserAccount>().Property(x => x.Role).HasConversion<string>();
         model.Entity<QueuedEmail>().Property(x => x.State).HasConversion<string>();
-        model.Entity<WorkOrder>().Property(x => x.Status).HasConversion<string>();
+        model.Entity<Customer>().Property(x => x.Id).ValueGeneratedNever();
+        model.Entity<Vehicle>().Property(x => x.Id).ValueGeneratedNever();
+        model.Entity<WorkOrder>().Property(x => x.Id).ValueGeneratedNever();
+        model.Entity<Diagnosis>().Property(x => x.Id).ValueGeneratedNever();
+        model.Entity<WorkOrder>().Property(x => x.Status).HasConversion<string>().IsConcurrencyToken();
         model.Entity<Vehicle>().HasOne(x => x.Customer).WithMany(x => x.Vehicles).HasForeignKey(x => x.CustomerId);
         model.Entity<WorkOrder>().HasOne(x => x.Vehicle).WithMany(x => x.WorkOrders).HasForeignKey(x => x.VehicleId);
         model.Entity<Diagnosis>().HasOne(x => x.WorkOrder).WithMany(x => x.Diagnoses).HasForeignKey(x => x.WorkOrderId);
+        model.Entity<Customer>().Navigation(x => x.Vehicles).HasField("vehicles")
+            .UsePropertyAccessMode(PropertyAccessMode.Field);
+        model.Entity<Vehicle>().Navigation(x => x.WorkOrders).HasField("workOrders")
+            .UsePropertyAccessMode(PropertyAccessMode.Field);
+        model.Entity<WorkOrder>().Navigation(x => x.Diagnoses).HasField("diagnoses")
+            .UsePropertyAccessMode(PropertyAccessMode.Field);
     }
 }
