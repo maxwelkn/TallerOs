@@ -164,7 +164,7 @@ Gestión de permisos está en `TallerOs.Domain/Permissions` y `TallerOs.Applicat
 
 `WorkOrder` es la entidad central del taller. `Customer`, `Vehicle`, `WorkOrder` y `Diagnosis` están en `src/TallerOs.Domain/Workshop` y conservan sus relaciones persistentes. `WorkOrderStatus` declara los cinco estados y `WorkOrderTransitions` centraliza las transiciones y condiciones. Consulta [las tablas completas](docs/maquina-de-estados.md): cuatro combinaciones permitidas y 21 prohibidas. `Delivered` es terminal y `Received → InRepair` está prohibida explícitamente.
 
-El incremento 1 de Práctica 3 implementa y prueba el dominio: diagnóstico registrado antes de marcar `Diagnosed`, confirmación del cliente para `Authorized` y confirmación de trabajo completado y entrega para `Delivered`. Registrar un diagnóstico no avanza el estado automáticamente. La consulta de órdenes existente se conserva. Los casos de uso, adaptadores y operaciones HTTP de los incrementos 2 y 3 están implementados. El incremento 4 añade la prueba de integración real con Gestión de permisos sin levantar la aplicación; su detección del defecto 4 se comprobará al preparar los experimentos del incremento 5.
+El incremento 1 de Práctica 3 implementa y prueba el dominio: diagnóstico registrado antes de marcar `Diagnosed`, confirmación del cliente para `Authorized` y confirmación de trabajo completado y entrega para `Delivered`. Registrar un diagnóstico no avanza el estado automáticamente. La consulta de órdenes existente se conserva. Los casos de uso, adaptadores y operaciones HTTP de los incrementos 2 y 3 están implementados. El incremento 4 añade la integración real de Gestión de permisos y el taller sin levantar la aplicación. El incremento 5 comprueba que esa integración detecta el defecto 4 y prepara los cuatro experimentos de entrega.
 
 ### Práctica 3: casos de uso y persistencia (incremento 2)
 
@@ -346,9 +346,60 @@ Para ejecutar únicamente esta integración sin iniciar ningún proceso API:
 dotnet test tests/TallerOs.IntegrationTests/TallerOs.IntegrationTests.csproj --filter FullyQualifiedName~PermissionsWorkshopIntegrationTests
 ```
 
-El comando general `dotnet test TallerOs.slnx` también la ejecuta. Las aserciones anteriores a la aprobación exigen Forbidden y ausencia de datos; serán la evidencia que se comprobará al quitar la consulta del permiso en el defecto 4. Los cuatro commits defectuosos, sus etiquetas y su verificación efectiva corresponden al incremento 5 y todavía no están preparados. La revisión acumulada final desde `practica-3` también sigue pendiente.
+El comando general `dotnet test TallerOs.slnx` también la ejecuta. Las aserciones anteriores a la aprobación exigen Forbidden y ausencia de datos: al quitar la consulta del permiso, la operación se permite y esos casos fallan. La sección Defectos documenta ese experimento. La revisión acumulada final de los cinco frentes desde un clon remoto de `practica-3` corresponde al incremento 6 y sigue pendiente.
 
 ## Defectos
+
+Esta sección corresponde a **Práctica 3**. La base correcta es `practica-3`: el comando `dotnet test TallerOs.slnx` ejecuta 246 casos y todos pasan. Las cuatro variantes `practica-3-defecto-1` a `practica-3-defecto-4` son experimentos independientes; sus cambios no se incorporan a la rama de trabajo ni a `main`.
+
+Las pruebas citadas pertenecen a [WorkOrderTests](tests/TallerOs.UnitTests/WorkOrderTests.cs) y [PermissionsWorkshopIntegrationTests](tests/TallerOs.IntegrationTests/PermissionsWorkshopIntegrationTests.cs). Cada fila identifica un caso que realmente falla con el defecto, además del total de fallos observado en toda la solución.
+
+| Defecto | Cambio deliberado | Prueba que lo detecta | Comportamiento protegido | Fallidas / aprobadas |
+| --- | --- | --- | --- | ---: |
+| 1 | Permitir `Received → InRepair`, primera fila de la tabla de prohibidas | `WorkOrderTests.RF_NEG_04_RD_04_ForbiddenTransition_PreservesOrder(initial: Received, next: InRepair)` | Rechaza el salto y conserva estado y datos de la orden | 3 / 243 |
+| 2 | Permitir `Delivered → Received` | `WorkOrderTests.RF_NEG_05_DeliveredOrder_CannotLeaveTerminalState(next: Received)` | No permite salir del estado terminal | 3 / 243 |
+| 3 | Quitar la exigencia de diagnóstico en `Received → Diagnosed`, primera transición condicionada | `WorkOrderTests.RF_NEG_03_DiagnoseWithoutDiagnosis_RejectsAndPreservesOrder` | Sin diagnóstico, rechaza y conserva Received | 4 / 242 |
+| 4 | Quitar la consulta de `WorkOrders.Read` en `WorkOrderQuery.CheckAccess` | `PermissionsWorkshopIntegrationTests.RF_NEG_06_RF_GP_05_ApprovalUnlocksRealWorkshopOperation(detail: false / true)` | La integración real debe rechazar listado y detalle mientras la solicitud está Pending | 10 / 236 |
+
+Cada variante compila y ejecuta los mismos 246 casos con las pruebas sin modificar. Los recuentos incluyen otras pruebas que también detectan el mismo cambio: en el defecto 4 fallan los cuatro casos de integración real, además de pruebas unitarias y HTTP. Un error de compilación no cuenta como detección.
+
+Los defectos 1 y 2 agregan una pareja en `src/TallerOs.Domain/Workshop/WorkOrderTransitions.cs`; el 3 elimina solo la guardia del diagnóstico en ese archivo. El 4 elimina solo la guardia de permiso de `src/TallerOs.Application/Workshop/WorkOrderQuery.cs`, conservando el rechazo por actor ausente. Eliminar esa consulta deja el parámetro `access` sin uso y produce la advertencia CS9113; la variante compila y falla por aserciones de seguridad. La base correcta compila sin errores ni advertencias.
+
+### Forma de los commits y etiquetas
+
+- `practica-3` señala la base correcta con código, pruebas y documentación.
+- Cada `practica-3-defecto-N` señala un commit de un solo defecto cuyo padre directo es el commit de `practica-3`.
+- Los commits defectuosos modifican únicamente un archivo de producción: no cambian pruebas, README, configuración ni dependencias. Su mensaje indica requisito, archivo y línea de la base que se modifica o elimina.
+- Las cuatro variantes parten de la misma base; no se encadenan entre sí. Las etiquetas anteriores se conservan y no se mueven.
+
+### Comprobación desde un clon de evaluación
+
+Sobre la base correcta:
+
+```powershell
+git checkout practica-3
+dotnet test TallerOs.slnx
+dotnet build TallerOs.slnx
+```
+
+Para cada variante, cambia el número del ejemplo por 1 a 4. Los dos primeros comandos deben devolver el mismo commit. El diff debe incluir solo el archivo de producción descrito y el mensaje debe identificar su línea:
+
+```powershell
+git rev-parse 'practica-3^{commit}'
+git rev-parse 'practica-3-defecto-1^'
+git diff --stat practica-3 practica-3-defecto-1
+git show --no-patch --format=full practica-3-defecto-1
+git checkout practica-3-defecto-1
+dotnet test TallerOs.slnx
+```
+
+Se espera al menos una prueba fallida en cada variante, con los recuentos de la tabla. Al terminar, ejecuta `git checkout practica-3` para volver al código correcto. Las pruebas HTTP que incluye el comando se aíslan en su propia base temporal, incluso al ejecutar una variante.
+
+### Entrega de Práctica 3
+
+En Moodle se entrega la URL del repositorio y el nombre `practica-3`; las cuatro etiquetas de defecto se consultan en el mismo repositorio. Se evalúa el punto etiquetado, no el estado futuro de `main`. La disponibilidad remota de las cinco etiquetas debe verificarse antes de entregar. La revisión acumulada desde el README de registro/activación, login/logout, rechazo administrativo, recuperación y Gestión de permisos se realizará en el incremento 6; la detección de estos defectos no la sustituye.
+
+## Defectos de la Práctica 2 (histórico)
 
 La Práctica 2 utiliza la variante B. Cada defecto se prueba por separado con el mismo comando de la sección **Pruebas**, sin modificar archivos de pruebas. La suite de permisos de la Práctica 2 tiene 44 casos: con el código correcto todos pasan; con cada defecto debe fallar al menos uno por el comportamiento incorrecto.
 
