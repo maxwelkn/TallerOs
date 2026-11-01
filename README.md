@@ -164,7 +164,7 @@ Gestión de permisos está en `TallerOs.Domain/Permissions` y `TallerOs.Applicat
 
 `WorkOrder` es la entidad central del taller. `Customer`, `Vehicle`, `WorkOrder` y `Diagnosis` están en `src/TallerOs.Domain/Workshop` y conservan sus relaciones persistentes. `WorkOrderStatus` declara los cinco estados y `WorkOrderTransitions` centraliza las transiciones y condiciones. Consulta [las tablas completas](docs/maquina-de-estados.md): cuatro combinaciones permitidas y 21 prohibidas. `Delivered` es terminal y `Received → InRepair` está prohibida explícitamente.
 
-El incremento 1 de Práctica 3 implementa y prueba el dominio: diagnóstico registrado antes de marcar `Diagnosed`, confirmación del cliente para `Authorized` y confirmación de trabajo completado y entrega para `Delivered`. Registrar un diagnóstico no avanza el estado automáticamente. La consulta de órdenes existente se conserva. Los casos de uso, adaptadores y operaciones HTTP de los incrementos 2 y 3 están implementados. La prueba de integración real con Gestión de permisos, sin levantar la aplicación, corresponde al incremento 4.
+El incremento 1 de Práctica 3 implementa y prueba el dominio: diagnóstico registrado antes de marcar `Diagnosed`, confirmación del cliente para `Authorized` y confirmación de trabajo completado y entrega para `Delivered`. Registrar un diagnóstico no avanza el estado automáticamente. La consulta de órdenes existente se conserva. Los casos de uso, adaptadores y operaciones HTTP de los incrementos 2 y 3 están implementados. El incremento 4 añade la prueba de integración real con Gestión de permisos sin levantar la aplicación; su detección del defecto 4 se comprobará al preparar los experimentos del incremento 5.
 
 ### Práctica 3: casos de uso y persistencia (incremento 2)
 
@@ -185,7 +185,7 @@ Se admiten estados por nombre, sin distinguir mayúsculas y recortando espacios 
 
 No cambian tablas, relaciones ni valores persistidos de estados. La suite verifica que no hay cambios pendientes de esquema ni migraciones pendientes sobre una base temporal creada con las migraciones existentes. No se elimina la base habitual ni se incorpora un motor nuevo.
 
-Las pruebas de persistencia ejercitan los casos sin servidor. Las rutas HTTP ya están conectadas y se comprueban por separado; la prueba sin servidor que integra realmente Gestión de permisos con el taller sigue pendiente del incremento 4.
+Las pruebas de persistencia ejercitan los casos sin servidor. Las rutas HTTP se comprueban por separado. La integración sin servidor que solicita y resuelve permisos mediante los componentes reales está implementada en `PermissionsWorkshopIntegrationTests`.
 
 ## Operaciones HTTP del taller (incremento 3)
 
@@ -326,10 +326,27 @@ El comando restaura dependencias, compila y ejecuta todas las suites de la soluc
 - `TallerOs.UnitTests`: dominio y aplicación con dobles, sin API, SQLite ni SMTP. `WorkOrderTests` cubre cada fila de transiciones y el terminal; `WorkshopServiceTests` cubre identidad, permisos, validación, referencias, resultados y ausencia de guardado ante rechazos.
 - `WorkshopPersistenceTests`, en `TallerOs.IntegrationTests`: casos y adaptadores reales del taller con SQLite temporal, sin API ni SMTP. Comprueba flujo entre contextos, concurrencia y rollback, FK inválida, conservación tras un rechazo, compatibilidad de modelo y cierre/reapertura del archivo.
 - `WorkshopHttpTests`, en el mismo proyecto: inicia automáticamente una API real en un proceso hijo oculto, un puerto local libre y una base temporal. Prepara cuentas ficticias y sesiones, realiza login HTTP y comprueba las nueve rutas, ambos roles, permisos de lectura, entradas inválidas, estados y terminal. Al terminar detiene su proceso y elimina sus archivos temporales; no usa tu base ni envía correo.
+- `PermissionsWorkshopIntegrationTests`, en `TallerOs.IntegrationTests`: cuatro casos sin servidor, sin procesos HTTP y sin dobles de Gestión de permisos o del taller. Usa `PermissionRequestService`, `WorkOrderQuery`, el catálogo configurado y los adaptadores EF reales con SQLite en memoria. Prueba listado y detalle antes/después de aprobar y antes/después de rechazar.
 
 La suite de estados se mantiene independiente del servidor. Para ejecutarla por separado: `dotnet test tests/TallerOs.UnitTests/TallerOs.UnitTests.csproj --filter FullyQualifiedName~WorkOrderTests`. El comando de la solución incluye también las comprobaciones HTTP, por lo que el equipo debe permitir iniciar procesos `dotnet` y escuchar en loopback; no necesitas arrancar la API manualmente.
 
-Cada prueba prepara los datos necesarios sin depender de otra prueba. Las fases se distinguen por bloques y los nombres identifican los requisitos. El fixture HTTP prepara concesiones de prueba directamente: no demuestra todavía la prueba sin servidor que crea y aprueba una solicitud con Gestión de permisos real. Esa integración del incremento 4 y los cuatro experimentos de defectos de Práctica 3 siguen pendientes.
+Cada prueba prepara los datos necesarios sin depender de otra prueba. Las fases se distinguen por bloques y los nombres identifican los requisitos. El fixture HTTP prepara concesiones directamente para comprobar el transporte y la autorización. La integración sin servidor utiliza un escenario distinto y crea la concesión exclusivamente mediante la aprobación real de una solicitud.
+
+### Integración real de permisos y taller (incremento 4)
+
+La prueba `PermissionsWorkshopIntegrationTests.RF_NEG_06_RF_GP_05_ApprovalUnlocksRealWorkshopOperation` se ejecuta dos veces: para listar órdenes y para consultar su detalle. Prepara dos usuarios distintos, Estándar y Administrador, y una orden guardada mediante los casos reales de clientes, vehículos y órdenes. El Estándar crea su solicitud `WorkOrders.Read` con `PermissionRequestService`; mientras está Pending, `WorkOrderQuery` responde Forbidden y no devuelve la orden. El Administrador aprueba mediante el mismo servicio de permisos y la solicitud termina Applied. La operación posterior del Estándar devuelve la orden persistida, conserva su estado Received y no cambia el rol de la cuenta.
+
+La prueba complementaria `RF_NEG_06_RF_GP_04_RejectionKeepsRealWorkshopOperationForbidden` verifica las dos consultas antes/después de un rechazo real: ambas siguen Forbidden, se conserva el motivo de rechazo y no aparece una concesión.
+
+El escenario compone los contratos con sus implementaciones reales en un contenedor de dependencias. Cada paso usa un alcance nuevo y un `AppDbContext` nuevo sobre la misma conexión SQLite en memoria, abierta solo durante esa prueba. Los usuarios se preparan como datos ficticios; `HttpCurrentActor` recibe la cuenta persistida en un `DefaultHttpContext` mínimo. Esto representa la identidad ya establecida en el límite de la aplicación: no se inicia Kestrel ni se pretende verificar allí Bearer, login o middleware. Esas comprobaciones corresponden a `WorkshopHttpTests`. No hay `FakeStore`, `FakeAccess`, `FakeActor` ni implementaciones sustitutas de los componentes en este escenario.
+
+Para ejecutar únicamente esta integración sin iniciar ningún proceso API:
+
+```powershell
+dotnet test tests/TallerOs.IntegrationTests/TallerOs.IntegrationTests.csproj --filter FullyQualifiedName~PermissionsWorkshopIntegrationTests
+```
+
+El comando general `dotnet test TallerOs.slnx` también la ejecuta. Las aserciones anteriores a la aprobación exigen Forbidden y ausencia de datos; serán la evidencia que se comprobará al quitar la consulta del permiso en el defecto 4. Los cuatro commits defectuosos, sus etiquetas y su verificación efectiva corresponden al incremento 5 y todavía no están preparados. La revisión acumulada final desde `practica-3` también sigue pendiente.
 
 ## Defectos
 
