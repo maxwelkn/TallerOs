@@ -1,5 +1,5 @@
 using Microsoft.EntityFrameworkCore;
-using TallerOs.Api.Workshop;
+using TallerOs.Domain.Workshop;
 using TallerOs.Api.Infrastructure.Access;
 using TallerOs.Domain.Permissions;
 
@@ -95,5 +95,11 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         model.Entity<Vehicle>().HasOne(x => x.Customer).WithMany(x => x.Vehicles).HasForeignKey(x => x.CustomerId);
         model.Entity<WorkOrder>().HasOne(x => x.Vehicle).WithMany(x => x.WorkOrders).HasForeignKey(x => x.VehicleId);
         model.Entity<Diagnosis>().HasOne(x => x.WorkOrder).WithMany(x => x.Diagnoses).HasForeignKey(x => x.WorkOrderId);
+        model.Entity<Customer>().Navigation(x => x.Vehicles).HasField("vehicles")
+            .UsePropertyAccessMode(PropertyAccessMode.Field);
+        model.Entity<Vehicle>().Navigation(x => x.WorkOrders).HasField("workOrders")
+            .UsePropertyAccessMode(PropertyAccessMode.Field);
+        model.Entity<WorkOrder>().Navigation(x => x.Diagnoses).HasField("diagnoses")
+            .UsePropertyAccessMode(PropertyAccessMode.Field);
     }
 }
