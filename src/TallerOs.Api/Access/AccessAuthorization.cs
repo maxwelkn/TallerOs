@@ -32,7 +32,11 @@ public static class AccessAuthorization
             [("GET", "/api/workshop/customers")] = UserRole.Standard,
             [("POST", "/api/workshop/vehicles")] = UserRole.Standard,
             [("GET", "/api/workshop/vehicles")] = UserRole.Standard,
-            [("GET", "/api/workshop/orders")] = UserRole.Standard
+            [("POST", "/api/workshop/orders")] = UserRole.Standard,
+            [("GET", "/api/workshop/orders")] = UserRole.Standard,
+            [("GET", "/api/workshop/orders/{id:guid}")] = UserRole.Standard,
+            [("POST", "/api/workshop/orders/{id:guid}/diagnoses")] = UserRole.Standard,
+            [("POST", "/api/workshop/orders/{id:guid}/transitions")] = UserRole.Standard
         };
 
     public static WebApplication UseAccessAuthorization(this WebApplication app)
