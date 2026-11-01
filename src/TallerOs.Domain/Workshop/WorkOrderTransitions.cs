@@ -6,7 +6,8 @@ public static class WorkOrderTransitions
         (WorkOrderStatus.Received, WorkOrderStatus.Diagnosed) or
         (WorkOrderStatus.Diagnosed, WorkOrderStatus.Authorized) or
         (WorkOrderStatus.Authorized, WorkOrderStatus.InRepair) or
-        (WorkOrderStatus.InRepair, WorkOrderStatus.Delivered);
+        (WorkOrderStatus.InRepair, WorkOrderStatus.Delivered) or
+        (WorkOrderStatus.Received, WorkOrderStatus.InRepair);
 
     public static void EnsureAllowed(WorkOrderStatus from, WorkOrderStatus to, bool hasDiagnosis,
         bool customerAuthorizationConfirmed, bool workCompletionConfirmed, bool deliveryConfirmed)
