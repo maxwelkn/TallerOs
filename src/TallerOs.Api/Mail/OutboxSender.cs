@@ -9,28 +9,22 @@ public sealed class OutboxSender(AppDbContext db, IConfiguration configuration, 
 {
     public async Task<int> SendPending()
     {
-        var host = configuration["SMTP_HOST"];
-        var username = configuration["SMTP_USER"];
-        var password = configuration["SMTP_PASSWORD"];
-        var from = configuration["SMTP_FROM"];
-        if (string.IsNullOrWhiteSpace(host) || string.IsNullOrWhiteSpace(username)
-            || string.IsNullOrWhiteSpace(password) || string.IsNullOrWhiteSpace(from))
-            throw new InvalidOperationException("Configura SMTP_HOST, SMTP_USER, SMTP_PASSWORD y SMTP_FROM.");
-        if (!int.TryParse(configuration["SMTP_PORT"], out var port)) port = 587;
+        var settings = new SmtpSettings(configuration);
 
         var pending = (await db.EmailOutbox.Where(x => x.State == MailState.Pending).ToListAsync())
             .OrderBy(x => x.CreatedUtc).ToList();
         var sent = 0;
-        using var client = new SmtpClient(host, port)
+        using var client = new SmtpClient(settings.Host, settings.Port)
         {
-            EnableSsl = true,
-            Credentials = new NetworkCredential(username, password)
+            EnableSsl = settings.UseTls,
+            UseDefaultCredentials = false,
+            Credentials = settings.UseAuthentication ? new NetworkCredential(settings.Username, settings.Password) : null
         };
         foreach (var item in pending)
         {
             try
             {
-                using var message = new MailMessage(from, item.Recipient, item.Subject, item.Body);
+                using var message = new MailMessage(settings.From, item.Recipient, item.Subject, item.Body);
                 await client.SendMailAsync(message);
                 item.State = MailState.Sent;
                 item.SentUtc = clock.GetUtcNow();

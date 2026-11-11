@@ -11,8 +11,48 @@ using TallerOs.Api.Workshop;
 using TallerOs.Application.Access;
 using TallerOs.Application.Permissions;
 using TallerOs.Application.Workshop;
+using TallerOs.Api.Documents;
+using TallerOs.Application.Documents;
+using TallerOs.Infrastructure.Documents;
+using TallerOs.Application.Mail;
+using TallerOs.Infrastructure.Mail;
+using TallerOs.Infrastructure.Workshop;
+
+if (args is ["check-health", var healthAddress])
+{
+    using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
+    try
+    {
+        using var response = await client.GetAsync(healthAddress);
+        Environment.ExitCode = response.IsSuccessStatusCode ? 0 : 1;
+    }
+    catch (Exception error) when (error is HttpRequestException or OperationCanceledException)
+    {
+        Environment.ExitCode = 1;
+    }
+    return;
+}
 
 var builder = WebApplication.CreateBuilder(args);
+var demoMode = builder.Configuration.GetValue("DEMO_MODE", false);
+builder.Services.AddSingleton(new DemoMailboxSettings(demoMode));
+builder.Services.AddHttpClient<IDemoMailbox, MailpitMailbox>(client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["MAILPIT_URL"] ?? "http://mailpit:8025/");
+    client.Timeout = TimeSpan.FromSeconds(5);
+    client.MaxResponseContentBufferSize = 2 * 1024 * 1024;
+});
+builder.Services.AddScoped<DemoMailboxService>();
+builder.Services.AddSingleton(new WeatherApiSettings(Environment.GetEnvironmentVariable("WEATHER_API_KEY"),
+    builder.Configuration["WORKSHOP_LOCATION"] ?? "Santo Domingo"));
+builder.Services.AddHttpClient<IWorkshopWeather, WeatherApiWeather>(client =>
+{
+    client.BaseAddress = new Uri("https://api.weatherapi.com/v1/");
+    client.Timeout = TimeSpan.FromSeconds(10);
+    client.MaxResponseContentBufferSize = 65536;
+}).ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false })
+    .RemoveAllLoggers();
+builder.Services.AddScoped<DeliveryReviewService>();
 var workingDirectory = Directory.GetCurrentDirectory();
 var solutionRoot = new DirectoryInfo(workingDirectory);
 while (solutionRoot.Parent is not null && !File.Exists(Path.Combine(solutionRoot.FullName, "TallerOs.slnx")))
@@ -23,6 +63,19 @@ var dbPath = builder.Configuration["DB_PATH"] ?? Path.Combine("data", "talleros.
 var absoluteDbPath = Path.GetFullPath(dbPath, baseDirectory);
 Directory.CreateDirectory(Path.GetDirectoryName(absoluteDbPath)!);
 builder.Services.AddDbContext<AppDbContext>(options => options.UseSqlite($"Data Source={absoluteDbPath}"));
+var dataDirectory = Path.GetDirectoryName(absoluteDbPath) ?? baseDirectory;
+var documentDbPath = Path.GetFullPath(builder.Configuration["DOCUMENT_DB_PATH"]
+    ?? Path.Combine(dataDirectory, "documents.db"), baseDirectory);
+var documentFilesPath = Path.GetFullPath(builder.Configuration["DOCUMENT_FILES_PATH"]
+    ?? Path.Combine(dataDirectory, "documents"), baseDirectory);
+if (string.Equals(documentDbPath, absoluteDbPath, StringComparison.OrdinalIgnoreCase))
+    throw new InvalidOperationException("DOCUMENT_DB_PATH debe ser distinta de DB_PATH.");
+Directory.CreateDirectory(Path.GetDirectoryName(documentDbPath) ?? baseDirectory);
+builder.Services.AddDbContext<DocumentDbContext>(options => options.UseSqlite($"Data Source={documentDbPath}"));
+builder.Services.AddScoped<IDocumentStore, DocumentStore>();
+builder.Services.AddSingleton<IDocumentFiles>(services =>
+    new LocalDocumentFiles(documentFilesPath, services.GetRequiredService<ILogger<LocalDocumentFiles>>()));
+builder.Services.AddScoped<DocumentService>();
 builder.Services.AddScoped<AccessService>();
 builder.Services.AddScoped<OutboxSender>();
 builder.Services.AddScoped<IPasswordHasher<UserAccount>, PasswordHasher<UserAccount>>();
@@ -51,6 +104,7 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     await db.Database.MigrateAsync();
+    await scope.ServiceProvider.GetRequiredService<DocumentDbContext>().Database.MigrateAsync();
 
     if (args.Contains("bootstrap-admin"))
     {
@@ -90,4 +144,6 @@ app.MapPermissionEndpoints();
 app.MapCustomerEndpoints();
 app.MapVehicleEndpoints();
 app.MapWorkOrderEndpoints();
+app.MapDocumentEndpoints();
+if (demoMode) app.MapDemoMailboxEndpoints();
 await app.RunAsync();

@@ -11,13 +11,21 @@ using TallerOs.Api.Infrastructure.Access;
 
 namespace TallerOs.IntegrationTests;
 
-public sealed class WorkshopHttpFixture : IAsyncLifetime
+public class WorkshopHttpFixture : IAsyncLifetime
 {
+    private readonly bool demoMode;
     private readonly DirectoryInfo directory = Directory.CreateTempSubdirectory("talleros-http-");
     private readonly Dictionary<string, string> tokens = [];
     private Process? server;
     private bool started;
     private HttpClient? client;
+
+    public string DocumentsDatabasePath => Path.Combine(directory.FullName, "documents.db");
+    public string DocumentsDirectory => Path.Combine(directory.FullName, "documents");
+
+    public WorkshopHttpFixture() { }
+
+    protected WorkshopHttpFixture(bool demoMode) => this.demoMode = demoMode;
 
     public async Task InitializeAsync()
     {
@@ -63,6 +71,12 @@ public sealed class WorkshopHttpFixture : IAsyncLifetime
             info.ArgumentList.Add("--urls");
             info.ArgumentList.Add("http://127.0.0.1:0");
             info.Environment["DB_PATH"] = path;
+            info.Environment["DOCUMENT_DB_PATH"] = DocumentsDatabasePath;
+            info.Environment["DOCUMENT_FILES_PATH"] = DocumentsDirectory;
+            info.Environment["DEMO_MODE"] = demoMode ? "true" : "false";
+            info.Environment["MAILPIT_URL"] = "http://127.0.0.1:1/";
+            info.Environment["WEATHER_API_KEY"] = "";
+            info.Environment["WORKSHOP_LOCATION"] = "Santo Domingo";
             info.Environment["ASPNETCORE_ENVIRONMENT"] = "Production";
             info.Environment["DOTNET_ENVIRONMENT"] = "Production";
             info.Environment["Logging__LogLevel__Default"] = "Warning";
@@ -105,14 +119,16 @@ public sealed class WorkshopHttpFixture : IAsyncLifetime
         }
     }
 
-    public async Task<HttpResponseMessage> Send(string method, string path, string? role = null, string? json = null)
+    public async Task<HttpResponseMessage> Send(string method, string path, string? role = null, string? json = null,
+        HttpContent? content = null)
     {
         if (client is null) throw new InvalidOperationException("La API de prueba no está disponible.");
         using var request = new HttpRequestMessage(new HttpMethod(method), path);
         if (role is not null)
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer",
                 role == "unknown" ? new string('A', 64) : tokens[role]);
-        if (json is not null) request.Content = new StringContent(json, Encoding.UTF8, "application/json");
+        if (content is not null) request.Content = content;
+        else if (json is not null) request.Content = new StringContent(json, Encoding.UTF8, "application/json");
         return await client.SendAsync(request);
     }
 
@@ -132,7 +148,7 @@ public sealed class WorkshopHttpFixture : IAsyncLifetime
         if (directory.Exists)
         {
             foreach (var file in directory.EnumerateFiles()) file.Delete();
-            directory.Delete();
+            directory.Delete(recursive: true);
         }
     }
 

@@ -23,6 +23,12 @@ public static class AccessAuthorization
             [("PUT", "/api/admin/users/{id:guid}/role")] = UserRole.Administrator,
             [("PUT", "/api/admin/users/{id:guid}/enabled")] = UserRole.Administrator,
             [("POST", "/api/admin/users/{id:guid}/force-reset")] = UserRole.Administrator,
+            [("GET", "/api/admin/demo-mail")] = UserRole.Administrator,
+            [("GET", "/api/admin/demo-mail/{id}")] = UserRole.Administrator,
+            [("POST", "/api/documents")] = UserRole.Standard,
+            [("GET", "/api/documents")] = UserRole.Standard,
+            [("GET", "/api/documents/{id:guid}/download")] = UserRole.Standard,
+            [("DELETE", "/api/documents/{id:guid}")] = UserRole.Standard,
             [("POST", "/api/permissions/requests")] = UserRole.Standard,
             [("GET", "/api/permissions/requests/mine")] = UserRole.Standard,
             [("GET", "/api/permissions/requests/pending")] = UserRole.Administrator,
@@ -35,6 +41,7 @@ public static class AccessAuthorization
             [("POST", "/api/workshop/orders")] = UserRole.Standard,
             [("GET", "/api/workshop/orders")] = UserRole.Standard,
             [("GET", "/api/workshop/orders/{id:guid}")] = UserRole.Standard,
+            [("GET", "/api/workshop/orders/{id:guid}/delivery-review")] = UserRole.Standard,
             [("POST", "/api/workshop/orders/{id:guid}/diagnoses")] = UserRole.Standard,
             [("POST", "/api/workshop/orders/{id:guid}/transitions")] = UserRole.Standard
         };

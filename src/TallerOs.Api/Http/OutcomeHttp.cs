@@ -11,6 +11,7 @@ public static class OutcomeHttp
         Failure.Forbidden => Results.Json(new { message = outcome.Message }, statusCode: 403),
         Failure.NotFound => Results.NotFound(new { message = outcome.Message }),
         Failure.Conflict => Results.Conflict(new { message = outcome.Message }),
+        Failure.Unavailable => Results.Json(new { message = outcome.Message }, statusCode: 503),
         _ => Results.BadRequest(new { message = outcome.Message })
     };
 }

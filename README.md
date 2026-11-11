@@ -1,8 +1,79 @@
 # TallerOS
 
-Sistema de gestión para un solo taller de automóviles y motocicletas. Incluye Control de acceso, Gestión de permisos y el dominio y casos de uso del taller con pruebas unitarias y de persistencia. Las operaciones HTTP del taller incluyen clientes, vehículos, órdenes, diagnósticos y avance de reparación con autorización en servidor. La API usa C# y ASP.NET Core 10, Entity Framework Core y SQLite. React se incorporará en una etapa posterior.
+Sistema de gestión para un solo taller de automóviles y motocicletas. Incluye Control de acceso, Gestión de permisos, Documentos y el dominio y casos de uso del taller con pruebas unitarias y de persistencia. Las operaciones HTTP del taller incluyen clientes, vehículos, órdenes, diagnósticos y avance de reparación con autorización en servidor. La API usa C# y ASP.NET Core 10, Entity Framework Core y SQLite. React se incorporará en una etapa posterior.
 
-## Requisitos y ejecución desde un clon
+## Contenedor
+
+Requiere Docker Desktop con contenedores Linux y Compose. Desde la raíz de un clon, copia el ejemplo y arranca; no necesitas instalar .NET ni preparar bases manualmente:
+
+```powershell
+Copy-Item .env.example .env
+docker compose up --build
+```
+
+La aplicación responde en **http://localhost:5000**, con comprobación en **http://localhost:5000/health**. La primera construcción descarga las imágenes y restaura paquetes, por lo que requiere conexión a Internet. Espera a que `app` esté saludable; puedes consultar el estado con `docker compose ps`. Para detener y retirar los contenedores, desde otra terminal en la misma carpeta:
+
+```powershell
+docker compose down
+```
+
+Ese comando conserva los volúmenes. No añadas `-v` si quieres conservar datos. Para volver a levantar sin reconstruir usa `docker compose up`; si cambias código, usa de nuevo `docker compose up --build`. Si el puerto 5000 está ocupado, cambia tanto `APP_PORT` como `APP_BASE_URL` en `.env` y usa esa nueva dirección en las peticiones. Una variable ya definida en la terminal puede prevalecer sobre `.env`; revisa esa configuración si el resultado difiere del ejemplo. No publiques la salida de `docker compose config`, pues puede incluir valores sensibles.
+
+El ejemplo activa `DEMO_MODE=true` y crea el Administrador ficticio **admin@example.test**, contraseña **DemoTaller2026**. Es una configuración local de demostración con valores públicos de ejemplo. El comando de inicialización no sobrescribe un Administrador que ya exista. Cambiar su contraseña en `.env` después de crearlo no cambia la cuenta persistida. El puerto se publica solo en el loopback del equipo; SMTP y el buzón no publican puertos.
+
+### Correo local y activación
+
+Mailpit captura los correos dentro de Compose, sin entregar mensajes a buzones externos. Para empezar la demostración:
+
+```powershell
+$base = 'http://localhost:5000'
+$demoLogin = @{ email = 'admin@example.test'; password = 'DemoTaller2026' } | ConvertTo-Json
+$adminSession = Invoke-RestMethod "$base/api/access/login" -Method Post -ContentType 'application/json' -Body $demoLogin
+$adminHeaders = @{ Authorization = "Bearer $($adminSession.token)" }
+$registration = @{ name = 'Estudiante de prueba'; email = 'estudiante@example.test'; password = 'UsuarioDemo2026' } | ConvertTo-Json
+Invoke-RestMethod "$base/api/access/register" -Method Post -ContentType 'application/json' -Body $registration
+docker compose run --rm --no-deps app send-mail
+$mailPage = Invoke-RestMethod "$base/api/admin/demo-mail" -Headers $adminHeaders
+$mail = Invoke-RestMethod "$base/api/admin/demo-mail/$($mailPage.messages[0].id)" -Headers $adminHeaders
+$mail.text
+```
+
+Abre el enlace de activación mostrado y después inicia sesión como `estudiante@example.test` usando el flujo de login de este README. Para repetir el registro usa otro correo ficticio. Después de solicitar recuperación, reenvío de activación o restablecimiento forzado, ejecuta nuevamente `send-mail` y consulta el mensaje correspondiente. Ejecutar el procesador otra vez sin nuevos pendientes debe informar cero envíos. Las peticiones solo encolan correo; el procesador es independiente.
+
+| Ruta de demostración | Resultado |
+| --- | --- |
+| `GET /api/admin/demo-mail?start=0` | Página de hasta 50 mensajes: `total`, `start`, `limit`, `messages`, con `id`, `subject` y `to`. Incrementa `start` para páginas posteriores. |
+| `GET /api/admin/demo-mail/{id}` | Mensaje con `id`, `subject`, `to` y `text`; no sirve HTML ni adjuntos del buzón. |
+
+Ambas requieren Administrador, usan `no-store` y rechazan sesiones inválidas o usuarios Estándar con 401/403. Con `DEMO_MODE=false` no se mapean y devuelven 404. Un mensaje inexistente produce 404; un buzón caído produce 503 controlado y el resto de la API continúa funcionando. Estas rutas son una herramienta de demostración, no el componente futuro de Notificaciones ni una API de envío abierta.
+
+### Datos y despliegue
+
+`app-data` guarda las bases de acceso/taller y metadatos de documentos; `document-files` guarda los bytes privados; `mail-data` conserva los correos capturados. Compose añade el nombre de proyecto al nombre real de cada volumen. Mantén el mismo proyecto al repetir la demostración. Son datos separados de tus archivos locales en `data/`; copiar `.env.example` no importa la base de Windows.
+
+Para comprobar persistencia, sube un archivo como usuario activado, guarda su ID y compara el hash de una descarga. Ejecuta `docker compose down` sin `-v`, vuelve a levantar con `docker compose up`, inicia sesión con ese mismo usuario, lista el ID y descarga de nuevo. Los bytes deben tener el mismo hash. El apartado Documentos detalla las peticiones. El arranque aplica migraciones automáticamente y no borra bases existentes.
+
+SQLite es un motor embebido: no necesita un servidor ni un contenedor de base separado. Esta es la interpretación técnica aplicada a la referencia del enunciado sobre un servicio de base de datos. Sus archivos persistentes se montan en el volumen de datos y no publican ningún puerto.
+
+```mermaid
+flowchart LR
+    Host[Equipo: localhost:5000] -->|HTTP publicado| App[app: API ASP.NET]
+    Init[init: migraciones y Administrador] -->|prepara antes del arranque| App
+    Init -->|escribe como usuario app| Data[(app-data: SQLite)]
+    App -->|lee y escribe| Data
+    App -->|guarda y descarga| Files[(document-files)]
+    Sender[app: comando send-mail] -->|lee pendientes| Data
+    Sender -->|SMTP interno: mailpit:1025| Mail[mailpit]
+    App -->|consulta administrativa interna: mailpit:8025| Mail
+    Mail -->|persiste mensajes| Captured[(mail-data)]
+    App -->|consulta HTTPS para revisar entrega| Weather[WeatherAPI: servicio externo]
+```
+
+Esta es una vista de despliegue y almacenamiento, separada del diagrama funcional del Core. `app` e `init` usan la misma imagen multietapa y ejecutan como el usuario sin privilegios `app`; la imagen final incluye el runtime ASP.NET y la publicación, sin SDK. El estado de init `Exited (0)` es esperado. No se copia `.env`, Git, bases, compilaciones locales ni documentos personales al contexto de construcción.
+
+`.env` queda ignorado por Git. `.env.example` contiene valores ficticios y una clave climática de ejemplo; el proyecto arranca con ella y la revisión de entrega responde con un error controlado. No guardes valores reales en el Dockerfile, Compose, ejemplos, capturas ni commits. La composición incluida es de demostración local; para SMTP real conserva TLS y autenticación, define las variables del proveedor y desactiva las rutas de buzón de demostración.
+
+## Ejecución local con .NET
 
 1. Instala el SDK de .NET 10 y clona este repositorio. Ejecuta los comandos desde la raíz `TallerOs`.
 2. Ejecuta `dotnet restore TallerOs.slnx` y `dotnet build TallerOs.slnx`.
@@ -34,6 +105,8 @@ Sistema de gestión para un solo taller de automóviles y motocicletas. Incluye 
 | Nombre | Para qué sirve |
 | --- | --- |
 | `DB_PATH` | Ruta opcional de la base SQLite; por defecto `data/talleros.db`. Usa la misma ruta en la API y en los comandos. |
+| `DOCUMENT_DB_PATH` | Base SQLite exclusiva de Documentos; por defecto `documents.db` junto a la base indicada por `DB_PATH`. Debe ser distinta de `DB_PATH`. |
+| `DOCUMENT_FILES_PATH` | Carpeta privada de los archivos; por defecto `documents` junto a la base indicada por `DB_PATH`. |
 | `APP_BASE_URL` | Dirección pública de la API usada en los enlaces de activación. |
 | `ADMIN_EMAIL` | Correo del primer Administrador, usado solo por `bootstrap-admin`. |
 | `ADMIN_PASSWORD` | Contraseña del primer Administrador, usada solo por `bootstrap-admin`. |
@@ -42,8 +115,15 @@ Sistema de gestión para un solo taller de automóviles y motocicletas. Incluye 
 | `SMTP_USER` | Usuario de autenticación SMTP. |
 | `SMTP_PASSWORD` | Contraseña de aplicación o credencial SMTP. |
 | `SMTP_FROM` | Dirección remitente del correo. |
+| `SMTP_USE_TLS` | Usa STARTTLS; por defecto `true`. Desactivarlo requiere `DEMO_MODE=true`. |
+| `SMTP_USE_AUTHENTICATION` | Exige credenciales SMTP; por defecto `true`. Desactivarlo requiere `DEMO_MODE=true`. |
+| `DEMO_MODE` | Habilita explícitamente el buzón administrativo local y la configuración SMTP de demostración; por defecto `false` fuera de Compose. |
+| `MAILPIT_URL` | URL interna del buzón de demostración; en Compose `http://mailpit:8025/`. |
+| `APP_PORT` | Puerto de Windows publicado por Compose; ejemplo `5000`. Debe corresponder a `APP_BASE_URL`. |
+| `WEATHER_API_KEY` | Clave del proveedor WeatherAPI, leída del entorno para la revisión de entrega. El ejemplo es ficticio y no permite obtener clima real. |
+| `WORKSHOP_LOCATION` | Ubicación del único taller usada para consultar clima; ejemplo y valor predeterminado `Santo Domingo`. |
 
-No coloques los valores en archivos versionados ni en commits. Para una cuenta Gmail personal, configura el servidor de Gmail y una contraseña de aplicación en tu entorno local; no uses la contraseña normal de la cuenta. La cuenta debe permitir enviar al correo que el evaluador elija.
+No coloques valores reales en archivos versionados ni en commits. En la ejecución local con .NET, las variables se toman del entorno: la aplicación no carga automáticamente `.env`; Compose sí utiliza ese archivo para su configuración. Para un proveedor SMTP real conserva TLS y autenticación. La demostración de Compose usa exclusivamente la captura local descrita arriba.
 
 ### Envío de los correos pendientes
 
@@ -131,6 +211,106 @@ La base SQLite está en `data/talleros.db`. Comprueba que `Users.PasswordHash` n
 
 Para simular SMTP caído, registra un usuario sin ejecutar `send-mail` o configura temporalmente un servidor SMTP inaccesible antes de invocar el comando. El registro responde correctamente y el correo permanece `Pending`. Reinicia la API y vuelve a consultar los usuarios para comprobar RD-09.
 
+## Documentos
+
+Todas las operaciones requieren una sesión válida. Cada archivo pertenece al usuario que lo sube; enviar otro ID en el formulario no cambia su propietario. Un Estándar lista únicamente sus documentos activos. El Administrador lista los activos de todos. Solo el propietario o un Administrador puede descargar o eliminar: otro usuario recibe 403. Sin sesión válida, la respuesta es 401.
+
+| Método y ruta | Entrada o resultado |
+| --- | --- |
+| `POST /api/documents` | Multipart con exactamente un archivo en el campo `file`; devuelve 201 con `id`, `name`, `contentType`, `size`, `uploadedUtc` y `uploadedBy`. |
+| `GET /api/documents` | Devuelve 200 con los metadatos visibles, sin documentos eliminados. |
+| `GET /api/documents/{id}/download` | Devuelve el contenido como adjunto con su nombre original normalizado. |
+| `DELETE /api/documents/{id}` | Marca eliminado y devuelve 204. Conserva el registro y el archivo físico. |
+
+Un archivo ausente o vacío produce 400. El máximo por archivo es **10 MiB** (10 485 760 bytes); excederlo devuelve 400 o 413 según el límite detectado al recibir la petición. No se aceptan varios archivos ni un campo con otro nombre. Un formulario o MIME inválido produce un rechazo controlado. Un ID inexistente o eliminado devuelve 404, también al descargar como Administrador o repetir la eliminación. Un GUID mal formado no coincide con la ruta y devuelve 404.
+
+El nombre se limita a su último segmento, admite hasta 255 caracteres y no determina la ubicación en disco. El tipo MIME se registra como declaración del cliente; no certifica el contenido ni sustituye un antivirus. Las descargas usan `application/octet-stream`, `Content-Disposition: attachment`, `nosniff` y `no-store`. Los archivos no se sirven desde una carpeta pública y los metadatos no exponen rutas ni claves de almacenamiento.
+
+### Comprobación desde PowerShell
+
+Con la API iniciada y `$base` y `$session.token` preparados como en la sección de inicio de sesión, selecciona un archivo ficticio de prueba. Este ejemplo usa `curl.exe`, incluido en Windows actuales:
+
+```powershell
+$documentPath = (Resolve-Path -LiteralPath (Read-Host 'Ruta del archivo de prueba')).Path
+$document = curl.exe --silent --show-error --fail-with-body -H "Authorization: Bearer $($session.token)" -F "file=@$documentPath" "$base/api/documents" | ConvertFrom-Json
+Invoke-RestMethod "$base/api/documents" -Headers $headers
+$downloadPath = Join-Path $env:TEMP 'talleros-document-download.bin'
+curl.exe --silent --show-error --fail-with-body -H "Authorization: Bearer $($session.token)" --output "$downloadPath" "$base/api/documents/$($document.id)/download"
+(Get-FileHash -LiteralPath $documentPath).Hash -eq (Get-FileHash -LiteralPath $downloadPath).Hash
+```
+
+La comparación debe devolver `True`. Inicia sesión con otro Estándar y comprueba listado, descarga y eliminación: no debe ver el documento y las dos operaciones directas deben devolver 403. Un Administrador debe poder listar y descargar el mismo documento. Antes de eliminarlo, reinicia la API con las mismas rutas de datos, vuelve a iniciar sesión y repite listado y descarga.
+
+Finalmente, con su propietario:
+
+```powershell
+Invoke-RestMethod "$base/api/documents/$($document.id)" -Method Delete -Headers $headers
+Invoke-RestMethod "$base/api/documents" -Headers $headers
+```
+
+El documento ya no aparece. Descargarlo directamente o repetir la eliminación devuelve 404. El registro continúa en la tabla `Documents` con `IsDeleted = 1`; el archivo conserva su clave interna y sus bytes. No hay operación de restauración ni borrado físico en este incremento.
+
+### Persistencia y fallos de almacenamiento
+
+Al arrancar se aplica la migración `AddDocuments` sobre una base exclusiva, por defecto `data/documents.db`. No modifica las migraciones ni tablas existentes de usuarios, permisos o taller. Los archivos se crean bajo `data/documents`, salvo configuración distinta. Las rutas relativas de `DB_PATH`, `DOCUMENT_DB_PATH` y `DOCUMENT_FILES_PATH` se resuelven desde la raíz de la solución; API y comandos deben usar la misma configuración.
+
+Una escritura fallida no registra el documento. Si se escribe un archivo nuevo pero falla guardar sus metadatos, se intenta retirar solo ese archivo; un fallo de compensación se registra e informa como error. Los fallos esperables de almacenamiento, incluido un archivo registrado que haya desaparecido del disco, producen 503 sin exponer rutas internas. Una caída abrupta entre escritura y guardado todavía puede dejar un archivo huérfano: no existe una transacción distribuida entre SQLite y disco. La eliminación lógica conserva ambos recursos. Deben conservarse tanto las bases como la carpeta de archivos al trasladar los datos.
+
+Con Compose, esas rutas se montan en volúmenes nombrados como se describe en Contenedor. Auditoría RF-DOC-06 y asociaciones de documentos a órdenes todavía no están implementadas.
+
+## API externa
+
+Se usa [WeatherAPI](https://www.weatherapi.com/docs/realtime-api/) para revisar las condiciones de una entrega. `GET /api/workshop/orders/{id}/delivery-review` combina una orden con la precipitación actual de la ubicación configurada y genera una recomendación; no reenvía el JSON del proveedor ni cambia el estado de la orden.
+
+Exige sesión y el mismo acceso que las consultas de órdenes: un Estándar necesita `WorkOrders.Read`; el Administrador conserva acceso. Una orden inexistente devuelve 404. Si el estado no es `InRepair`, responde 409 antes de consultar clima. Sin sesión responde 401; sin permiso, 403.
+
+Con una clave válida, devuelve 200 con `orderId`, `orderStatus`, `location`, `observedUtc`, `precipitationMm` y `recommendation`. Precipitación mayor de cero recomienda coordinar bajo techo; cero indica que no se observa precipitación. Es orientación basada en una observación actual: no es un pronóstico ni garantiza seguridad vial. Las confirmaciones y transiciones de entrega siguen siendo las existentes.
+
+La clave llega exclusivamente por `WEATHER_API_KEY` del entorno, desde `.env` en Compose. Para obtener datos reales debes usar una clave emitida por WeatherAPI; una clave inventada solo permite demostrar rechazo. Configura también `WORKSHOP_LOCATION` y recrea app para recoger cambios del entorno:
+
+```powershell
+docker compose up -d --force-recreate app
+```
+
+En ejecución directa con .NET, define esas variables en la terminal antes de arrancar; no se carga `.env` automáticamente. La API inicia aunque falte la clave y solo rechaza la revisión que necesita clima. Una clave ausente o rechazada, cuota, proveedor caído, datos inválidos, error de red o timeout devuelven 503 con mensaje comprensible. El límite de espera HTTP es 10 segundos. Un fallo de WeatherAPI no obliga al usuario a volver a iniciar sesión ni bloquea el resto del taller.
+
+Para probar, prepara una orden como en la sección del taller, agrega diagnóstico y realiza `Diagnosed → Authorized → InRepair` con las condiciones necesarias. Con `$order.id`, `$base` y las cabeceras de una sesión autorizada:
+
+```powershell
+Invoke-RestMethod "$base/api/workshop/orders/$($order.id)/delivery-review" -Headers $headers
+```
+
+La respuesta usa el instante UTC obtenido de `last_updated_epoch` y la precipitación `precip_mm`. Una revisión no confirma trabajo terminado ni cambia a `Delivered`. No se siguen redirecciones del proveedor, se limita su respuesta a 64 KiB y el cliente HTTP no registra URLs, claves o cuerpos de error externos. Los mensajes al cliente son propios de TallerOs.
+
+Ejemplo real del rechazo obtenido desde el contenedor al consultar una orden `InRepair` con una clave ficticia (HTTP 503):
+
+```json
+{"message":"El proveedor rechazó la clave de clima. Revisa WEATHER_API_KEY."}
+```
+
+También se comprobó una consulta positiva real desde Docker con una clave válida, sobre una orden ficticia. Respuesta HTTP 200 obtenida, sin incluir la clave:
+
+```json
+{
+  "orderId": "8c8a8e73-4c17-4ea6-84a6-b0916196d3f5",
+  "orderStatus": "InRepair",
+  "location": "Santo Domingo, Dominican Republic",
+  "observedUtc": "2026-11-11T02:15:00+00:00",
+  "precipitationMm": 0.0,
+  "recommendation": "No se observa precipitación en el taller al momento de la observación."
+}
+```
+
+La fecha es el instante UTC de la observación del proveedor, no una predicción. Esa orden pertenece a datos aislados de comprobación; su ID no existe automáticamente en una base nueva. Se verificó que la revisión conserva `InRepair`, que `/health` continúa disponible y que la clave y la URL externa no aparecen en los logs revisados. El caso anterior de clave inválida conserva su evidencia de rechazo controlado. Las suites usan dobles y configuración vacía; el ejemplo positivo de este apartado procede de una petición real.
+
+## Entrega de la Práctica 4
+
+El punto de entrega se identifica con la etiqueta `practica-4`. En Moodle corresponde entregar la URL de este repositorio y el nombre de la etiqueta; la subida a Moodle es manual.
+
+Para evaluar la entrega, clona el repositorio, ejecuta `git checkout practica-4` y sigue **Contenedor**: copia `.env.example` a `.env` y ejecuta `docker compose up --build`. La clave ficticia permite arrancar y comprobar el rechazo controlado de la revisión climática; **API externa** conserva también una respuesta positiva real sin secretos.
+
+La demostración acumulada utiliza los flujos ya descritos en este README: registro y activación mediante Mailpit y `send-mail`; login y logout; rechazo de rutas administrativas a un Estándar; recuperación mediante el código del correo capturado; solicitudes de permisos aprobadas y rechazadas con transiciones inválidas rechazadas; y operaciones del taller con rechazo de `Received → InRepair`. Completa la demostración con **Documentos** y la recreación de contenedores sin `-v` indicada en **Datos y despliegue**. Los datos deben conservarse, incluida la posibilidad de iniciar sesión y descargar los mismos bytes.
+
 ## Componentes del Core y del negocio
 
 ```mermaid
@@ -139,15 +319,16 @@ flowchart LR
         Acceso[Control de acceso: identidad, roles y acceso efectivo]
         Permisos[Gestión de permisos: solicitudes y resolución]
         Notificaciones[Notificaciones: prevista; cola SMTP existente]
-        Documentos[Documentos: previsto]
+        Documentos[Documentos: archivos privados y borrado lógico]
         Reportes[Reportes: previsto]
         Auditoria[Auditoría: prevista]
     end
     subgraph Negocio[Módulo del taller]
-        Taller[Taller: casos de clientes, vehículos, órdenes y diagnósticos; consulta protegida]
+        Taller[Taller: clientes, vehículos, órdenes, diagnósticos y revisión de entrega]
     end
     Taller -->|consulta identidad y permiso| Acceso
     Permisos -->|obtiene actor y concede acceso| Acceso
+    Documentos -->|obtiene identidad y rol| Acceso
     Taller -.->|futuro: avisa eventos| Notificaciones
     Taller -.->|futuro opcional: adjunta archivos| Documentos
     Taller -.->|futuro: aporta datos agregados| Reportes
@@ -158,7 +339,11 @@ flowchart LR
 
 Las flechas continuas representan conexiones implementadas y las punteadas conexiones futuras. La cola SMTP ya existe para activación y recuperación; las notificaciones internas todavía no están implementadas. Todo se ejecuta dentro de la misma aplicación.
 
-Gestión de permisos está en `TallerOs.Domain/Permissions` y `TallerOs.Application/Permissions`. Sus contratos de acceso están en `TallerOs.Application/Access`; no conocen entidades del taller. El identificador `WorkOrders.Read` se registra en `Program.cs`. La consulta que lo consume pertenece a `TallerOs.Application/Workshop`. Los adaptadores de persistencia nuevos están en `src/TallerOs.Api/Infrastructure`; comparten el contexto existente para guardar resolución y concesión en una sola transacción. La separación física completa de infraestructura y del código heredado sigue pendiente.
+Gestión de permisos está en `TallerOs.Domain/Permissions` y `TallerOs.Application/Permissions`. Sus contratos de acceso están en `TallerOs.Application/Access`; no conocen entidades del taller. El identificador `WorkOrders.Read` se registra en `Program.cs`. La consulta que lo consume pertenece a `TallerOs.Application/Workshop`. Los adaptadores heredados de permisos y taller permanecen en `src/TallerOs.Api/Infrastructure`; comparten el contexto existente para guardar resolución y concesión en una sola transacción. La separación física completa de infraestructura y del código heredado sigue pendiente.
+
+Documentos tiene dominio en `TallerOs.Domain/Documents`, casos de uso y contratos en `TallerOs.Application/Documents`, y adaptadores en el nuevo proyecto `TallerOs.Infrastructure`. Este depende de Application, que depende de Domain; API compone las implementaciones e invoca los casos de uso. `DocumentDbContext` solo mapea documentos y no consulta tablas de otros componentes. El uso de identidad pasa por `ICurrentActor`. El taller todavía no consume Documentos: la flecha correspondiente continúa como futura.
+
+La revisión climática pertenece al negocio. `DeliveryWeatherAssessment` interpreta precipitación en Domain; `DeliveryReviewService` coordina la consulta autorizada y el puerto `IWorkshopWeather` en Application. `WeatherApiWeather` implementa HTTP en Infrastructure. No introduce dependencias del Core hacia el taller, tablas nuevas ni cambios de máquina de estados. El servicio externo aparece en la vista de despliegue, fuera de los componentes funcionales del Core.
 
 ## Máquina de estados del negocio
 
@@ -324,6 +509,11 @@ dotnet test TallerOs.slnx
 El comando restaura dependencias, compila y ejecuta todas las suites de la solución:
 
 - `TallerOs.UnitTests`: dominio y aplicación con dobles, sin API, SQLite ni SMTP. `WorkOrderTests` cubre cada fila de transiciones y el terminal; `WorkshopServiceTests` cubre identidad, permisos, validación, referencias, resultados y ausencia de guardado ante rechazos.
+- `DocumentTests` y `DocumentServiceTests`, en la suite unitaria: metadatos, límites, identidad, visibilidad, propietario/Administrador, borrado lógico y compensación de una subida fallida sin recursos externos.
+- `DocumentStorageTests`, en integración: migraciones propias, SQLite y disco temporales, reapertura, filtrado real, conservación del archivo al borrar lógicamente, escritura interrumpida, tamaño real y compensación ante fallo de SQLite.
+- `DocumentHttpTests`, en integración: las cuatro rutas con sesiones válidas e inválidas, dos Estándar y un Administrador, descargas idénticas, borrado lógico, multipart y límites de 10 MiB. La fixture configura rutas temporales explícitas de metadatos y archivos; no usa la base habitual ni SMTP.
+- `DemoMailboxServiceTests`, `MailpitMailboxTests`, `MailConfigurationTests` y las pruebas HTTP de buzón: autorización, desactivación de rutas, traducción del proveedor, errores y mantenimiento de los valores seguros SMTP. Las pruebas automatizadas sustituyen Mailpit por dobles o un destino local inaccesible; no requieren Docker ni envían correo real.
+- `DeliveryReviewTests`, `WeatherApiWeatherTests` y `DeliveryReviewHttpTests`: regla climática, acceso/estado antes de red, formato de observación, codificación, errores, timeout, cancelación y ausencia de mutación. Usan dobles o configuración vacía explícita; no consumen una clave real ni llaman al proveedor desde las suites.
 - `WorkshopPersistenceTests`, en `TallerOs.IntegrationTests`: casos y adaptadores reales del taller con SQLite temporal, sin API ni SMTP. Comprueba flujo entre contextos, concurrencia y rollback, FK inválida, conservación tras un rechazo, compatibilidad de modelo y cierre/reapertura del archivo.
 - `WorkshopHttpTests`, en el mismo proyecto: inicia automáticamente una API real en un proceso hijo oculto, un puerto local libre y una base temporal. Prepara cuentas ficticias y sesiones, realiza login HTTP y comprueba las nueve rutas, ambos roles, permisos de lectura, entradas inválidas, estados y terminal. Al terminar detiene su proceso y elimina sus archivos temporales; no usa tu base ni envía correo.
 - `PermissionsWorkshopIntegrationTests`, en `TallerOs.IntegrationTests`: cuatro casos sin servidor, sin procesos HTTP y sin dobles de Gestión de permisos o del taller. Usa `PermissionRequestService`, `WorkOrderQuery`, el catálogo configurado y los adaptadores EF reales con SQLite en memoria. Prueba listado y detalle antes/después de aprobar y antes/después de rechazar.

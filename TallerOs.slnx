@@ -3,6 +3,7 @@
     <Project Path="src/TallerOs.Api/TallerOs.Api.csproj" />
     <Project Path="src/TallerOs.Application/TallerOs.Application.csproj" />
     <Project Path="src/TallerOs.Domain/TallerOs.Domain.csproj" />
+    <Project Path="src/TallerOs.Infrastructure/TallerOs.Infrastructure.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/TallerOs.UnitTests/TallerOs.UnitTests.csproj" />
