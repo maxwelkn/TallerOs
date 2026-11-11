@@ -41,6 +41,7 @@ public static class AccessAuthorization
             [("POST", "/api/workshop/orders")] = UserRole.Standard,
             [("GET", "/api/workshop/orders")] = UserRole.Standard,
             [("GET", "/api/workshop/orders/{id:guid}")] = UserRole.Standard,
+            [("GET", "/api/workshop/orders/{id:guid}/delivery-review")] = UserRole.Standard,
             [("POST", "/api/workshop/orders/{id:guid}/diagnoses")] = UserRole.Standard,
             [("POST", "/api/workshop/orders/{id:guid}/transitions")] = UserRole.Standard
         };

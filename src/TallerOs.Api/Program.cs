@@ -16,6 +16,7 @@ using TallerOs.Application.Documents;
 using TallerOs.Infrastructure.Documents;
 using TallerOs.Application.Mail;
 using TallerOs.Infrastructure.Mail;
+using TallerOs.Infrastructure.Workshop;
 
 if (args is ["check-health", var healthAddress])
 {
@@ -42,6 +43,16 @@ builder.Services.AddHttpClient<IDemoMailbox, MailpitMailbox>(client =>
     client.MaxResponseContentBufferSize = 2 * 1024 * 1024;
 });
 builder.Services.AddScoped<DemoMailboxService>();
+builder.Services.AddSingleton(new WeatherApiSettings(Environment.GetEnvironmentVariable("WEATHER_API_KEY"),
+    builder.Configuration["WORKSHOP_LOCATION"] ?? "Santo Domingo"));
+builder.Services.AddHttpClient<IWorkshopWeather, WeatherApiWeather>(client =>
+{
+    client.BaseAddress = new Uri("https://api.weatherapi.com/v1/");
+    client.Timeout = TimeSpan.FromSeconds(10);
+    client.MaxResponseContentBufferSize = 65536;
+}).ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false })
+    .RemoveAllLoggers();
+builder.Services.AddScoped<DeliveryReviewService>();
 var workingDirectory = Directory.GetCurrentDirectory();
 var solutionRoot = new DirectoryInfo(workingDirectory);
 while (solutionRoot.Parent is not null && !File.Exists(Path.Combine(solutionRoot.FullName, "TallerOs.slnx")))

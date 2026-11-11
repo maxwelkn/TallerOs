@@ -25,6 +25,12 @@ public static class WorkOrderEndpoints
             (await query.List(cancellationToken)).ToHttp());
         orders.MapGet("/{id:guid}", async (Guid id, WorkOrderQuery query, CancellationToken cancellationToken) =>
             (await query.Find(id, cancellationToken)).ToHttp());
+        orders.MapGet("/{id:guid}/delivery-review", async (Guid id, HttpResponse response,
+            DeliveryReviewService service, CancellationToken cancellationToken) =>
+        {
+            response.Headers.CacheControl = "no-store";
+            return (await service.Review(id, cancellationToken)).ToHttp();
+        });
         orders.MapPost("/{id:guid}/diagnoses", async (Guid id, AddDiagnosisRequest request,
             WorkOrderService service, CancellationToken cancellationToken) =>
         {
