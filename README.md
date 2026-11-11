@@ -303,6 +303,14 @@ También se comprobó una consulta positiva real desde Docker con una clave vál
 
 La fecha es el instante UTC de la observación del proveedor, no una predicción. Esa orden pertenece a datos aislados de comprobación; su ID no existe automáticamente en una base nueva. Se verificó que la revisión conserva `InRepair`, que `/health` continúa disponible y que la clave y la URL externa no aparecen en los logs revisados. El caso anterior de clave inválida conserva su evidencia de rechazo controlado. Las suites usan dobles y configuración vacía; el ejemplo positivo de este apartado procede de una petición real.
 
+## Entrega de la Práctica 4
+
+El punto de entrega se identifica con la etiqueta `practica-4`, que se publicará después de revisar e integrar esta práctica. Mientras esa etiqueta no exista, la rama de implementación es `feature/practica-4-contenedor`. En Moodle corresponde entregar la URL de este repositorio y el nombre de la etiqueta; la subida a Moodle es manual.
+
+Una vez publicada la etiqueta, el evaluador puede clonar, ejecutar `git checkout practica-4` y seguir **Contenedor**: copiar `.env.example` a `.env` y ejecutar `docker compose up --build`. La clave ficticia permite arrancar y comprobar el rechazo controlado de la revisión climática; **API externa** conserva también una respuesta positiva real sin secretos.
+
+La demostración acumulada utiliza los flujos ya descritos en este README: registro y activación mediante Mailpit y `send-mail`; login y logout; rechazo de rutas administrativas a un Estándar; recuperación mediante el código del correo capturado; solicitudes de permisos aprobadas y rechazadas con transiciones inválidas rechazadas; y operaciones del taller con rechazo de `Received → InRepair`. Completa la demostración con **Documentos** y la recreación de contenedores sin `-v` indicada en **Datos y despliegue**. Los datos deben conservarse, incluida la posibilidad de iniciar sesión y descargar los mismos bytes.
+
 ## Componentes del Core y del negocio
 
 ```mermaid
