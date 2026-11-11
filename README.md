@@ -1,6 +1,6 @@
 # TallerOS
 
-Sistema de gestión para un solo taller de automóviles y motocicletas. Incluye Control de acceso, Gestión de permisos y el dominio y casos de uso del taller con pruebas unitarias y de persistencia. Las operaciones HTTP del taller incluyen clientes, vehículos, órdenes, diagnósticos y avance de reparación con autorización en servidor. La API usa C# y ASP.NET Core 10, Entity Framework Core y SQLite. React se incorporará en una etapa posterior.
+Sistema de gestión para un solo taller de automóviles y motocicletas. Incluye Control de acceso, Gestión de permisos, Documentos y el dominio y casos de uso del taller con pruebas unitarias y de persistencia. Las operaciones HTTP del taller incluyen clientes, vehículos, órdenes, diagnósticos y avance de reparación con autorización en servidor. La API usa C# y ASP.NET Core 10, Entity Framework Core y SQLite. React se incorporará en una etapa posterior.
 
 ## Requisitos y ejecución desde un clon
 
@@ -34,6 +34,8 @@ Sistema de gestión para un solo taller de automóviles y motocicletas. Incluye 
 | Nombre | Para qué sirve |
 | --- | --- |
 | `DB_PATH` | Ruta opcional de la base SQLite; por defecto `data/talleros.db`. Usa la misma ruta en la API y en los comandos. |
+| `DOCUMENT_DB_PATH` | Base SQLite exclusiva de Documentos; por defecto `documents.db` junto a la base indicada por `DB_PATH`. Debe ser distinta de `DB_PATH`. |
+| `DOCUMENT_FILES_PATH` | Carpeta privada de los archivos; por defecto `documents` junto a la base indicada por `DB_PATH`. |
 | `APP_BASE_URL` | Dirección pública de la API usada en los enlaces de activación. |
 | `ADMIN_EMAIL` | Correo del primer Administrador, usado solo por `bootstrap-admin`. |
 | `ADMIN_PASSWORD` | Contraseña del primer Administrador, usada solo por `bootstrap-admin`. |
@@ -131,6 +133,53 @@ La base SQLite está en `data/talleros.db`. Comprueba que `Users.PasswordHash` n
 
 Para simular SMTP caído, registra un usuario sin ejecutar `send-mail` o configura temporalmente un servidor SMTP inaccesible antes de invocar el comando. El registro responde correctamente y el correo permanece `Pending`. Reinicia la API y vuelve a consultar los usuarios para comprobar RD-09.
 
+## Documentos
+
+Todas las operaciones requieren una sesión válida. Cada archivo pertenece al usuario que lo sube; enviar otro ID en el formulario no cambia su propietario. Un Estándar lista únicamente sus documentos activos. El Administrador lista los activos de todos. Solo el propietario o un Administrador puede descargar o eliminar: otro usuario recibe 403. Sin sesión válida, la respuesta es 401.
+
+| Método y ruta | Entrada o resultado |
+| --- | --- |
+| `POST /api/documents` | Multipart con exactamente un archivo en el campo `file`; devuelve 201 con `id`, `name`, `contentType`, `size`, `uploadedUtc` y `uploadedBy`. |
+| `GET /api/documents` | Devuelve 200 con los metadatos visibles, sin documentos eliminados. |
+| `GET /api/documents/{id}/download` | Devuelve el contenido como adjunto con su nombre original normalizado. |
+| `DELETE /api/documents/{id}` | Marca eliminado y devuelve 204. Conserva el registro y el archivo físico. |
+
+Un archivo ausente o vacío produce 400. El máximo por archivo es **10 MiB** (10 485 760 bytes); excederlo devuelve 400 o 413 según el límite detectado al recibir la petición. No se aceptan varios archivos ni un campo con otro nombre. Un formulario o MIME inválido produce un rechazo controlado. Un ID inexistente o eliminado devuelve 404, también al descargar como Administrador o repetir la eliminación. Un GUID mal formado no coincide con la ruta y devuelve 404.
+
+El nombre se limita a su último segmento, admite hasta 255 caracteres y no determina la ubicación en disco. El tipo MIME se registra como declaración del cliente; no certifica el contenido ni sustituye un antivirus. Las descargas usan `application/octet-stream`, `Content-Disposition: attachment`, `nosniff` y `no-store`. Los archivos no se sirven desde una carpeta pública y los metadatos no exponen rutas ni claves de almacenamiento.
+
+### Comprobación desde PowerShell
+
+Con la API iniciada y `$base` y `$session.token` preparados como en la sección de inicio de sesión, selecciona un archivo ficticio de prueba. Este ejemplo usa `curl.exe`, incluido en Windows actuales:
+
+```powershell
+$documentPath = (Resolve-Path -LiteralPath (Read-Host 'Ruta del archivo de prueba')).Path
+$document = curl.exe --silent --show-error --fail-with-body -H "Authorization: Bearer $($session.token)" -F "file=@$documentPath" "$base/api/documents" | ConvertFrom-Json
+Invoke-RestMethod "$base/api/documents" -Headers $headers
+$downloadPath = Join-Path $env:TEMP 'talleros-document-download.bin'
+curl.exe --silent --show-error --fail-with-body -H "Authorization: Bearer $($session.token)" --output "$downloadPath" "$base/api/documents/$($document.id)/download"
+(Get-FileHash -LiteralPath $documentPath).Hash -eq (Get-FileHash -LiteralPath $downloadPath).Hash
+```
+
+La comparación debe devolver `True`. Inicia sesión con otro Estándar y comprueba listado, descarga y eliminación: no debe ver el documento y las dos operaciones directas deben devolver 403. Un Administrador debe poder listar y descargar el mismo documento. Antes de eliminarlo, reinicia la API con las mismas rutas de datos, vuelve a iniciar sesión y repite listado y descarga.
+
+Finalmente, con su propietario:
+
+```powershell
+Invoke-RestMethod "$base/api/documents/$($document.id)" -Method Delete -Headers $headers
+Invoke-RestMethod "$base/api/documents" -Headers $headers
+```
+
+El documento ya no aparece. Descargarlo directamente o repetir la eliminación devuelve 404. El registro continúa en la tabla `Documents` con `IsDeleted = 1`; el archivo conserva su clave interna y sus bytes. No hay operación de restauración ni borrado físico en este incremento.
+
+### Persistencia y fallos de almacenamiento
+
+Al arrancar se aplica la migración `AddDocuments` sobre una base exclusiva, por defecto `data/documents.db`. No modifica las migraciones ni tablas existentes de usuarios, permisos o taller. Los archivos se crean bajo `data/documents`, salvo configuración distinta. Las rutas relativas de `DB_PATH`, `DOCUMENT_DB_PATH` y `DOCUMENT_FILES_PATH` se resuelven desde la raíz de la solución; API y comandos deben usar la misma configuración.
+
+Una escritura fallida no registra el documento. Si se escribe un archivo nuevo pero falla guardar sus metadatos, se intenta retirar solo ese archivo; un fallo de compensación se registra e informa como error. Los fallos esperables de almacenamiento, incluido un archivo registrado que haya desaparecido del disco, producen 503 sin exponer rutas internas. Una caída abrupta entre escritura y guardado todavía puede dejar un archivo huérfano: no existe una transacción distribuida entre SQLite y disco. La eliminación lógica conserva ambos recursos. Deben conservarse tanto las bases como la carpeta de archivos al trasladar los datos.
+
+El almacenamiento de este incremento es local. Docker, volúmenes, auditoría RF-DOC-06 y asociaciones de documentos a órdenes todavía no están implementados.
+
 ## Componentes del Core y del negocio
 
 ```mermaid
@@ -139,7 +188,7 @@ flowchart LR
         Acceso[Control de acceso: identidad, roles y acceso efectivo]
         Permisos[Gestión de permisos: solicitudes y resolución]
         Notificaciones[Notificaciones: prevista; cola SMTP existente]
-        Documentos[Documentos: previsto]
+        Documentos[Documentos: archivos privados y borrado lógico]
         Reportes[Reportes: previsto]
         Auditoria[Auditoría: prevista]
     end
@@ -148,6 +197,7 @@ flowchart LR
     end
     Taller -->|consulta identidad y permiso| Acceso
     Permisos -->|obtiene actor y concede acceso| Acceso
+    Documentos -->|obtiene identidad y rol| Acceso
     Taller -.->|futuro: avisa eventos| Notificaciones
     Taller -.->|futuro opcional: adjunta archivos| Documentos
     Taller -.->|futuro: aporta datos agregados| Reportes
@@ -158,7 +208,9 @@ flowchart LR
 
 Las flechas continuas representan conexiones implementadas y las punteadas conexiones futuras. La cola SMTP ya existe para activación y recuperación; las notificaciones internas todavía no están implementadas. Todo se ejecuta dentro de la misma aplicación.
 
-Gestión de permisos está en `TallerOs.Domain/Permissions` y `TallerOs.Application/Permissions`. Sus contratos de acceso están en `TallerOs.Application/Access`; no conocen entidades del taller. El identificador `WorkOrders.Read` se registra en `Program.cs`. La consulta que lo consume pertenece a `TallerOs.Application/Workshop`. Los adaptadores de persistencia nuevos están en `src/TallerOs.Api/Infrastructure`; comparten el contexto existente para guardar resolución y concesión en una sola transacción. La separación física completa de infraestructura y del código heredado sigue pendiente.
+Gestión de permisos está en `TallerOs.Domain/Permissions` y `TallerOs.Application/Permissions`. Sus contratos de acceso están en `TallerOs.Application/Access`; no conocen entidades del taller. El identificador `WorkOrders.Read` se registra en `Program.cs`. La consulta que lo consume pertenece a `TallerOs.Application/Workshop`. Los adaptadores heredados de permisos y taller permanecen en `src/TallerOs.Api/Infrastructure`; comparten el contexto existente para guardar resolución y concesión en una sola transacción. La separación física completa de infraestructura y del código heredado sigue pendiente.
+
+Documentos tiene dominio en `TallerOs.Domain/Documents`, casos de uso y contratos en `TallerOs.Application/Documents`, y adaptadores en el nuevo proyecto `TallerOs.Infrastructure`. Este depende de Application, que depende de Domain; API compone las implementaciones e invoca los casos de uso. `DocumentDbContext` solo mapea documentos y no consulta tablas de otros componentes. El uso de identidad pasa por `ICurrentActor`. El taller todavía no consume Documentos: la flecha correspondiente continúa como futura.
 
 ## Máquina de estados del negocio
 
@@ -324,6 +376,9 @@ dotnet test TallerOs.slnx
 El comando restaura dependencias, compila y ejecuta todas las suites de la solución:
 
 - `TallerOs.UnitTests`: dominio y aplicación con dobles, sin API, SQLite ni SMTP. `WorkOrderTests` cubre cada fila de transiciones y el terminal; `WorkshopServiceTests` cubre identidad, permisos, validación, referencias, resultados y ausencia de guardado ante rechazos.
+- `DocumentTests` y `DocumentServiceTests`, en la suite unitaria: metadatos, límites, identidad, visibilidad, propietario/Administrador, borrado lógico y compensación de una subida fallida sin recursos externos.
+- `DocumentStorageTests`, en integración: migraciones propias, SQLite y disco temporales, reapertura, filtrado real, conservación del archivo al borrar lógicamente, escritura interrumpida, tamaño real y compensación ante fallo de SQLite.
+- `DocumentHttpTests`, en integración: las cuatro rutas con sesiones válidas e inválidas, dos Estándar y un Administrador, descargas idénticas, borrado lógico, multipart y límites de 10 MiB. La fixture configura rutas temporales explícitas de metadatos y archivos; no usa la base habitual ni SMTP.
 - `WorkshopPersistenceTests`, en `TallerOs.IntegrationTests`: casos y adaptadores reales del taller con SQLite temporal, sin API ni SMTP. Comprueba flujo entre contextos, concurrencia y rollback, FK inválida, conservación tras un rechazo, compatibilidad de modelo y cierre/reapertura del archivo.
 - `WorkshopHttpTests`, en el mismo proyecto: inicia automáticamente una API real en un proceso hijo oculto, un puerto local libre y una base temporal. Prepara cuentas ficticias y sesiones, realiza login HTTP y comprueba las nueve rutas, ambos roles, permisos de lectura, entradas inválidas, estados y terminal. Al terminar detiene su proceso y elimina sus archivos temporales; no usa tu base ni envía correo.
 - `PermissionsWorkshopIntegrationTests`, en `TallerOs.IntegrationTests`: cuatro casos sin servidor, sin procesos HTTP y sin dobles de Gestión de permisos o del taller. Usa `PermissionRequestService`, `WorkOrderQuery`, el catálogo configurado y los adaptadores EF reales con SQLite en memoria. Prueba listado y detalle antes/después de aprobar y antes/después de rechazar.
