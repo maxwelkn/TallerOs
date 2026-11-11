@@ -11,8 +11,9 @@ using TallerOs.Api.Infrastructure.Access;
 
 namespace TallerOs.IntegrationTests;
 
-public sealed class WorkshopHttpFixture : IAsyncLifetime
+public class WorkshopHttpFixture : IAsyncLifetime
 {
+    private readonly bool demoMode;
     private readonly DirectoryInfo directory = Directory.CreateTempSubdirectory("talleros-http-");
     private readonly Dictionary<string, string> tokens = [];
     private Process? server;
@@ -21,6 +22,10 @@ public sealed class WorkshopHttpFixture : IAsyncLifetime
 
     public string DocumentsDatabasePath => Path.Combine(directory.FullName, "documents.db");
     public string DocumentsDirectory => Path.Combine(directory.FullName, "documents");
+
+    public WorkshopHttpFixture() { }
+
+    protected WorkshopHttpFixture(bool demoMode) => this.demoMode = demoMode;
 
     public async Task InitializeAsync()
     {
@@ -68,6 +73,8 @@ public sealed class WorkshopHttpFixture : IAsyncLifetime
             info.Environment["DB_PATH"] = path;
             info.Environment["DOCUMENT_DB_PATH"] = DocumentsDatabasePath;
             info.Environment["DOCUMENT_FILES_PATH"] = DocumentsDirectory;
+            info.Environment["DEMO_MODE"] = demoMode ? "true" : "false";
+            info.Environment["MAILPIT_URL"] = "http://127.0.0.1:1/";
             info.Environment["ASPNETCORE_ENVIRONMENT"] = "Production";
             info.Environment["DOTNET_ENVIRONMENT"] = "Production";
             info.Environment["Logging__LogLevel__Default"] = "Warning";
