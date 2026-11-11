@@ -75,6 +75,8 @@ public class WorkshopHttpFixture : IAsyncLifetime
             info.Environment["DOCUMENT_FILES_PATH"] = DocumentsDirectory;
             info.Environment["DEMO_MODE"] = demoMode ? "true" : "false";
             info.Environment["MAILPIT_URL"] = "http://127.0.0.1:1/";
+            info.Environment["WEATHER_API_KEY"] = "";
+            info.Environment["WORKSHOP_LOCATION"] = "Santo Domingo";
             info.Environment["ASPNETCORE_ENVIRONMENT"] = "Production";
             info.Environment["DOTNET_ENVIRONMENT"] = "Production";
             info.Environment["Logging__LogLevel__Default"] = "Warning";
