@@ -288,7 +288,20 @@ Ejemplo real del rechazo obtenido desde el contenedor al consultar una orden `In
 {"message":"El proveedor rechazó la clave de clima. Revisa WEATHER_API_KEY."}
 ```
 
-Se comprobó que esa petición conserva la orden y deja disponibles las otras consultas. **La consulta meteorológica positiva real permanece pendiente de una clave válida.** Los casos positivos están comprobados con dobles HTTP y de aplicación; el ejemplo anterior es evidencia de rechazo controlado, no de obtención de clima real.
+También se comprobó una consulta positiva real desde Docker con una clave válida, sobre una orden ficticia. Respuesta HTTP 200 obtenida, sin incluir la clave:
+
+```json
+{
+  "orderId": "8c8a8e73-4c17-4ea6-84a6-b0916196d3f5",
+  "orderStatus": "InRepair",
+  "location": "Santo Domingo, Dominican Republic",
+  "observedUtc": "2026-11-11T02:15:00+00:00",
+  "precipitationMm": 0.0,
+  "recommendation": "No se observa precipitación en el taller al momento de la observación."
+}
+```
+
+La fecha es el instante UTC de la observación del proveedor, no una predicción. Esa orden pertenece a datos aislados de comprobación; su ID no existe automáticamente en una base nueva. Se verificó que la revisión conserva `InRepair`, que `/health` continúa disponible y que la clave y la URL externa no aparecen en los logs revisados. El caso anterior de clave inválida conserva su evidencia de rechazo controlado. Las suites usan dobles y configuración vacía; el ejemplo positivo de este apartado procede de una petición real.
 
 ## Componentes del Core y del negocio
 
