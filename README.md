@@ -2,7 +2,77 @@
 
 Sistema de gestión para un solo taller de automóviles y motocicletas. Incluye Control de acceso, Gestión de permisos, Documentos y el dominio y casos de uso del taller con pruebas unitarias y de persistencia. Las operaciones HTTP del taller incluyen clientes, vehículos, órdenes, diagnósticos y avance de reparación con autorización en servidor. La API usa C# y ASP.NET Core 10, Entity Framework Core y SQLite. React se incorporará en una etapa posterior.
 
-## Requisitos y ejecución desde un clon
+## Contenedor
+
+Requiere Docker Desktop con contenedores Linux y Compose. Desde la raíz de un clon, copia el ejemplo y arranca; no necesitas instalar .NET ni preparar bases manualmente:
+
+```powershell
+Copy-Item .env.example .env
+docker compose up --build
+```
+
+La aplicación responde en **http://localhost:5000**, con comprobación en **http://localhost:5000/health**. La primera construcción descarga las imágenes y restaura paquetes, por lo que requiere conexión a Internet. Espera a que `app` esté saludable; puedes consultar el estado con `docker compose ps`. Para detener y retirar los contenedores, desde otra terminal en la misma carpeta:
+
+```powershell
+docker compose down
+```
+
+Ese comando conserva los volúmenes. No añadas `-v` si quieres conservar datos. Para volver a levantar sin reconstruir usa `docker compose up`; si cambias código, usa de nuevo `docker compose up --build`. Si el puerto 5000 está ocupado, cambia tanto `APP_PORT` como `APP_BASE_URL` en `.env` y usa esa nueva dirección en las peticiones. Una variable ya definida en la terminal puede prevalecer sobre `.env`; revisa esa configuración si el resultado difiere del ejemplo. No publiques la salida de `docker compose config`, pues puede incluir valores sensibles.
+
+El ejemplo activa `DEMO_MODE=true` y crea el Administrador ficticio **admin@example.test**, contraseña **DemoTaller2026**. Es una configuración local de demostración con valores públicos de ejemplo. El comando de inicialización no sobrescribe un Administrador que ya exista. Cambiar su contraseña en `.env` después de crearlo no cambia la cuenta persistida. El puerto se publica solo en el loopback del equipo; SMTP y el buzón no publican puertos.
+
+### Correo local y activación
+
+Mailpit captura los correos dentro de Compose, sin entregar mensajes a buzones externos. Para empezar la demostración:
+
+```powershell
+$base = 'http://localhost:5000'
+$demoLogin = @{ email = 'admin@example.test'; password = 'DemoTaller2026' } | ConvertTo-Json
+$adminSession = Invoke-RestMethod "$base/api/access/login" -Method Post -ContentType 'application/json' -Body $demoLogin
+$adminHeaders = @{ Authorization = "Bearer $($adminSession.token)" }
+$registration = @{ name = 'Estudiante de prueba'; email = 'estudiante@example.test'; password = 'UsuarioDemo2026' } | ConvertTo-Json
+Invoke-RestMethod "$base/api/access/register" -Method Post -ContentType 'application/json' -Body $registration
+docker compose run --rm --no-deps app send-mail
+$mailPage = Invoke-RestMethod "$base/api/admin/demo-mail" -Headers $adminHeaders
+$mail = Invoke-RestMethod "$base/api/admin/demo-mail/$($mailPage.messages[0].id)" -Headers $adminHeaders
+$mail.text
+```
+
+Abre el enlace de activación mostrado y después inicia sesión como `estudiante@example.test` usando el flujo de login de este README. Para repetir el registro usa otro correo ficticio. Después de solicitar recuperación, reenvío de activación o restablecimiento forzado, ejecuta nuevamente `send-mail` y consulta el mensaje correspondiente. Ejecutar el procesador otra vez sin nuevos pendientes debe informar cero envíos. Las peticiones solo encolan correo; el procesador es independiente.
+
+| Ruta de demostración | Resultado |
+| --- | --- |
+| `GET /api/admin/demo-mail?start=0` | Página de hasta 50 mensajes: `total`, `start`, `limit`, `messages`, con `id`, `subject` y `to`. Incrementa `start` para páginas posteriores. |
+| `GET /api/admin/demo-mail/{id}` | Mensaje con `id`, `subject`, `to` y `text`; no sirve HTML ni adjuntos del buzón. |
+
+Ambas requieren Administrador, usan `no-store` y rechazan sesiones inválidas o usuarios Estándar con 401/403. Con `DEMO_MODE=false` no se mapean y devuelven 404. Un mensaje inexistente produce 404; un buzón caído produce 503 controlado y el resto de la API continúa funcionando. Estas rutas son una herramienta de demostración, no el componente futuro de Notificaciones ni una API de envío abierta.
+
+### Datos y despliegue
+
+`app-data` guarda las bases de acceso/taller y metadatos de documentos; `document-files` guarda los bytes privados; `mail-data` conserva los correos capturados. Compose añade el nombre de proyecto al nombre real de cada volumen. Mantén el mismo proyecto al repetir la demostración. Son datos separados de tus archivos locales en `data/`; copiar `.env.example` no importa la base de Windows.
+
+Para comprobar persistencia, sube un archivo como usuario activado, guarda su ID y compara el hash de una descarga. Ejecuta `docker compose down` sin `-v`, vuelve a levantar con `docker compose up`, inicia sesión con ese mismo usuario, lista el ID y descarga de nuevo. Los bytes deben tener el mismo hash. El apartado Documentos detalla las peticiones. El arranque aplica migraciones automáticamente y no borra bases existentes.
+
+SQLite es un motor embebido: no necesita un servidor ni un contenedor de base separado. Esta es la interpretación técnica aplicada a la referencia del enunciado sobre un servicio de base de datos. Sus archivos persistentes se montan en el volumen de datos y no publican ningún puerto.
+
+```mermaid
+flowchart LR
+    Host[Equipo: localhost:5000] -->|HTTP publicado| App[app: API ASP.NET]
+    Init[init: migraciones y Administrador] -->|prepara antes del arranque| App
+    Init -->|escribe como usuario app| Data[(app-data: SQLite)]
+    App -->|lee y escribe| Data
+    App -->|guarda y descarga| Files[(document-files)]
+    Sender[app: comando send-mail] -->|lee pendientes| Data
+    Sender -->|SMTP interno: mailpit:1025| Mail[mailpit]
+    App -->|consulta administrativa interna: mailpit:8025| Mail
+    Mail -->|persiste mensajes| Captured[(mail-data)]
+```
+
+Esta es una vista de despliegue y almacenamiento, separada del diagrama funcional del Core. `app` e `init` usan la misma imagen multietapa y ejecutan como el usuario sin privilegios `app`; la imagen final incluye el runtime ASP.NET y la publicación, sin SDK. El estado de init `Exited (0)` es esperado. No se copia `.env`, Git, bases, compilaciones locales ni documentos personales al contexto de construcción.
+
+`.env` queda ignorado por Git. `.env.example` contiene valores ficticios y la clave climática de ejemplo; la integración WeatherAPI corresponde al siguiente incremento y aún no tiene una operación implementada. No guardes valores reales en el Dockerfile, Compose, ejemplos, capturas ni commits. La composición incluida es de demostración local; para SMTP real conserva TLS y autenticación, define las variables del proveedor y desactiva las rutas de buzón de demostración.
+
+## Ejecución local con .NET
 
 1. Instala el SDK de .NET 10 y clona este repositorio. Ejecuta los comandos desde la raíz `TallerOs`.
 2. Ejecuta `dotnet restore TallerOs.slnx` y `dotnet build TallerOs.slnx`.
@@ -44,8 +114,15 @@ Sistema de gestión para un solo taller de automóviles y motocicletas. Incluye 
 | `SMTP_USER` | Usuario de autenticación SMTP. |
 | `SMTP_PASSWORD` | Contraseña de aplicación o credencial SMTP. |
 | `SMTP_FROM` | Dirección remitente del correo. |
+| `SMTP_USE_TLS` | Usa STARTTLS; por defecto `true`. Desactivarlo requiere `DEMO_MODE=true`. |
+| `SMTP_USE_AUTHENTICATION` | Exige credenciales SMTP; por defecto `true`. Desactivarlo requiere `DEMO_MODE=true`. |
+| `DEMO_MODE` | Habilita explícitamente el buzón administrativo local y la configuración SMTP de demostración; por defecto `false` fuera de Compose. |
+| `MAILPIT_URL` | URL interna del buzón de demostración; en Compose `http://mailpit:8025/`. |
+| `APP_PORT` | Puerto de Windows publicado por Compose; ejemplo `5000`. Debe corresponder a `APP_BASE_URL`. |
+| `WEATHER_API_KEY` | Variable reservada para la integración climática del siguiente incremento; solo valor de ejemplo por ahora. |
+| `WORKSHOP_LOCATION` | Ubicación reservada para esa integración; ejemplo `Santo Domingo`. |
 
-No coloques los valores en archivos versionados ni en commits. Para una cuenta Gmail personal, configura el servidor de Gmail y una contraseña de aplicación en tu entorno local; no uses la contraseña normal de la cuenta. La cuenta debe permitir enviar al correo que el evaluador elija.
+No coloques valores reales en archivos versionados ni en commits. En la ejecución local con .NET, las variables se toman del entorno: la aplicación no carga automáticamente `.env`; Compose sí utiliza ese archivo para su configuración. Para un proveedor SMTP real conserva TLS y autenticación. La demostración de Compose usa exclusivamente la captura local descrita arriba.
 
 ### Envío de los correos pendientes
 
@@ -178,7 +255,7 @@ Al arrancar se aplica la migración `AddDocuments` sobre una base exclusiva, por
 
 Una escritura fallida no registra el documento. Si se escribe un archivo nuevo pero falla guardar sus metadatos, se intenta retirar solo ese archivo; un fallo de compensación se registra e informa como error. Los fallos esperables de almacenamiento, incluido un archivo registrado que haya desaparecido del disco, producen 503 sin exponer rutas internas. Una caída abrupta entre escritura y guardado todavía puede dejar un archivo huérfano: no existe una transacción distribuida entre SQLite y disco. La eliminación lógica conserva ambos recursos. Deben conservarse tanto las bases como la carpeta de archivos al trasladar los datos.
 
-El almacenamiento de este incremento es local. Docker, volúmenes, auditoría RF-DOC-06 y asociaciones de documentos a órdenes todavía no están implementados.
+Con Compose, esas rutas se montan en volúmenes nombrados como se describe en Contenedor. Auditoría RF-DOC-06 y asociaciones de documentos a órdenes todavía no están implementadas.
 
 ## Componentes del Core y del negocio
 
@@ -379,6 +456,7 @@ El comando restaura dependencias, compila y ejecuta todas las suites de la soluc
 - `DocumentTests` y `DocumentServiceTests`, en la suite unitaria: metadatos, límites, identidad, visibilidad, propietario/Administrador, borrado lógico y compensación de una subida fallida sin recursos externos.
 - `DocumentStorageTests`, en integración: migraciones propias, SQLite y disco temporales, reapertura, filtrado real, conservación del archivo al borrar lógicamente, escritura interrumpida, tamaño real y compensación ante fallo de SQLite.
 - `DocumentHttpTests`, en integración: las cuatro rutas con sesiones válidas e inválidas, dos Estándar y un Administrador, descargas idénticas, borrado lógico, multipart y límites de 10 MiB. La fixture configura rutas temporales explícitas de metadatos y archivos; no usa la base habitual ni SMTP.
+- `DemoMailboxServiceTests`, `MailpitMailboxTests`, `MailConfigurationTests` y las pruebas HTTP de buzón: autorización, desactivación de rutas, traducción del proveedor, errores y mantenimiento de los valores seguros SMTP. Las pruebas automatizadas sustituyen Mailpit por dobles o un destino local inaccesible; no requieren Docker ni envían correo real.
 - `WorkshopPersistenceTests`, en `TallerOs.IntegrationTests`: casos y adaptadores reales del taller con SQLite temporal, sin API ni SMTP. Comprueba flujo entre contextos, concurrencia y rollback, FK inválida, conservación tras un rechazo, compatibilidad de modelo y cierre/reapertura del archivo.
 - `WorkshopHttpTests`, en el mismo proyecto: inicia automáticamente una API real en un proceso hijo oculto, un puerto local libre y una base temporal. Prepara cuentas ficticias y sesiones, realiza login HTTP y comprueba las nueve rutas, ambos roles, permisos de lectura, entradas inválidas, estados y terminal. Al terminar detiene su proceso y elimina sus archivos temporales; no usa tu base ni envía correo.
 - `PermissionsWorkshopIntegrationTests`, en `TallerOs.IntegrationTests`: cuatro casos sin servidor, sin procesos HTTP y sin dobles de Gestión de permisos o del taller. Usa `PermissionRequestService`, `WorkOrderQuery`, el catálogo configurado y los adaptadores EF reales con SQLite en memoria. Prueba listado y detalle antes/después de aprobar y antes/después de rechazar.
