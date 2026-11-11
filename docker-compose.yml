@@ -1,0 +1,69 @@
+x-application: &application
+  image: talleros:practica4
+  build: .
+  environment: &runtime-environment
+    ASPNETCORE_ENVIRONMENT: Production
+    APP_BASE_URL: ${APP_BASE_URL:-http://localhost:5000}
+    DEMO_MODE: ${DEMO_MODE:-true}
+    DB_PATH: ${DB_PATH:-/app/data/talleros.db}
+    DOCUMENT_DB_PATH: ${DOCUMENT_DB_PATH:-/app/data/documents.db}
+    DOCUMENT_FILES_PATH: ${DOCUMENT_FILES_PATH:-/app/documents}
+  volumes:
+    - app-data:/app/data
+    - document-files:/app/documents
+
+services:
+  init:
+    <<: *application
+    command: ["bootstrap-admin"]
+    environment:
+      <<: *runtime-environment
+      ADMIN_EMAIL: ${ADMIN_EMAIL:?Copia .env.example a .env}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Copia .env.example a .env}
+    restart: "no"
+  mailpit:
+    image: axllent/mailpit:v1.33.0
+    environment:
+      MP_DATABASE: /data/mailpit.db
+      MP_DISABLE_VERSION_CHECK: "true"
+      MP_SMTP_DISABLE_RDNS: "true"
+    volumes:
+      - mail-data:/data
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+  app:
+    <<: *application
+    environment:
+      <<: *runtime-environment
+      MAILPIT_URL: ${MAILPIT_URL:-http://mailpit:8025/}
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_FROM: ${SMTP_FROM:-talleros@example.test}
+      SMTP_USE_TLS: ${SMTP_USE_TLS:-false}
+      SMTP_USE_AUTHENTICATION: ${SMTP_USE_AUTHENTICATION:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      WEATHER_API_KEY: ${WEATHER_API_KEY:-}
+      WORKSHOP_LOCATION: ${WORKSHOP_LOCATION:-Santo Domingo}
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      mailpit:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${APP_PORT:-5000}:8080"
+    healthcheck:
+      test: ["CMD", "dotnet", "TallerOs.Api.dll", "check-health", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+
+volumes:
+  app-data:
+  document-files:
+  mail-data:

@@ -14,8 +14,34 @@ using TallerOs.Application.Workshop;
 using TallerOs.Api.Documents;
 using TallerOs.Application.Documents;
 using TallerOs.Infrastructure.Documents;
+using TallerOs.Application.Mail;
+using TallerOs.Infrastructure.Mail;
+
+if (args is ["check-health", var healthAddress])
+{
+    using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
+    try
+    {
+        using var response = await client.GetAsync(healthAddress);
+        Environment.ExitCode = response.IsSuccessStatusCode ? 0 : 1;
+    }
+    catch (Exception error) when (error is HttpRequestException or OperationCanceledException)
+    {
+        Environment.ExitCode = 1;
+    }
+    return;
+}
 
 var builder = WebApplication.CreateBuilder(args);
+var demoMode = builder.Configuration.GetValue("DEMO_MODE", false);
+builder.Services.AddSingleton(new DemoMailboxSettings(demoMode));
+builder.Services.AddHttpClient<IDemoMailbox, MailpitMailbox>(client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["MAILPIT_URL"] ?? "http://mailpit:8025/");
+    client.Timeout = TimeSpan.FromSeconds(5);
+    client.MaxResponseContentBufferSize = 2 * 1024 * 1024;
+});
+builder.Services.AddScoped<DemoMailboxService>();
 var workingDirectory = Directory.GetCurrentDirectory();
 var solutionRoot = new DirectoryInfo(workingDirectory);
 while (solutionRoot.Parent is not null && !File.Exists(Path.Combine(solutionRoot.FullName, "TallerOs.slnx")))
@@ -108,4 +134,5 @@ app.MapCustomerEndpoints();
 app.MapVehicleEndpoints();
 app.MapWorkOrderEndpoints();
 app.MapDocumentEndpoints();
+if (demoMode) app.MapDemoMailboxEndpoints();
 await app.RunAsync();
