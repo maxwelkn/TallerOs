@@ -11,6 +11,9 @@ using TallerOs.Api.Workshop;
 using TallerOs.Application.Access;
 using TallerOs.Application.Permissions;
 using TallerOs.Application.Workshop;
+using TallerOs.Api.Documents;
+using TallerOs.Application.Documents;
+using TallerOs.Infrastructure.Documents;
 
 var builder = WebApplication.CreateBuilder(args);
 var workingDirectory = Directory.GetCurrentDirectory();
@@ -23,6 +26,19 @@ var dbPath = builder.Configuration["DB_PATH"] ?? Path.Combine("data", "talleros.
 var absoluteDbPath = Path.GetFullPath(dbPath, baseDirectory);
 Directory.CreateDirectory(Path.GetDirectoryName(absoluteDbPath)!);
 builder.Services.AddDbContext<AppDbContext>(options => options.UseSqlite($"Data Source={absoluteDbPath}"));
+var dataDirectory = Path.GetDirectoryName(absoluteDbPath) ?? baseDirectory;
+var documentDbPath = Path.GetFullPath(builder.Configuration["DOCUMENT_DB_PATH"]
+    ?? Path.Combine(dataDirectory, "documents.db"), baseDirectory);
+var documentFilesPath = Path.GetFullPath(builder.Configuration["DOCUMENT_FILES_PATH"]
+    ?? Path.Combine(dataDirectory, "documents"), baseDirectory);
+if (string.Equals(documentDbPath, absoluteDbPath, StringComparison.OrdinalIgnoreCase))
+    throw new InvalidOperationException("DOCUMENT_DB_PATH debe ser distinta de DB_PATH.");
+Directory.CreateDirectory(Path.GetDirectoryName(documentDbPath) ?? baseDirectory);
+builder.Services.AddDbContext<DocumentDbContext>(options => options.UseSqlite($"Data Source={documentDbPath}"));
+builder.Services.AddScoped<IDocumentStore, DocumentStore>();
+builder.Services.AddSingleton<IDocumentFiles>(services =>
+    new LocalDocumentFiles(documentFilesPath, services.GetRequiredService<ILogger<LocalDocumentFiles>>()));
+builder.Services.AddScoped<DocumentService>();
 builder.Services.AddScoped<AccessService>();
 builder.Services.AddScoped<OutboxSender>();
 builder.Services.AddScoped<IPasswordHasher<UserAccount>, PasswordHasher<UserAccount>>();
@@ -51,6 +67,7 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     await db.Database.MigrateAsync();
+    await scope.ServiceProvider.GetRequiredService<DocumentDbContext>().Database.MigrateAsync();
 
     if (args.Contains("bootstrap-admin"))
     {
@@ -90,4 +107,5 @@ app.MapPermissionEndpoints();
 app.MapCustomerEndpoints();
 app.MapVehicleEndpoints();
 app.MapWorkOrderEndpoints();
+app.MapDocumentEndpoints();
 await app.RunAsync();

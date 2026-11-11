@@ -1,6 +1,6 @@
 namespace TallerOs.Application.Common;
 
-public enum Failure { None, Unauthorized, Forbidden, Invalid, NotFound, Conflict }
+public enum Failure { None, Unauthorized, Forbidden, Invalid, NotFound, Conflict, Unavailable }
 
 public sealed record Outcome<T>(T? Value, Failure Failure = Failure.None, string? Message = null)
 {
