@@ -4,8 +4,6 @@ Sistema de gestión para un solo taller de automóviles y motocicletas. Incluye 
 
 ## Requisitos y ejecución desde un clon
 
-La Práctica 4 está en desarrollo: consulta el [plan aprobado](docs/plan-practica-4.md) y la [verificación por incrementos](docs/verificacion-practica-4.md). Las instrucciones siguientes corresponden a la ejecución actual con .NET; el arranque con Docker todavía no está implementado.
-
 1. Instala el SDK de .NET 10 y clona este repositorio. Ejecuta los comandos desde la raíz `TallerOs`.
 2. Ejecuta `dotnet restore TallerOs.slnx` y `dotnet build TallerOs.slnx`.
 3. En PowerShell, crea un Administrador inicial con un correo distinto del que usarás para probar el registro:
