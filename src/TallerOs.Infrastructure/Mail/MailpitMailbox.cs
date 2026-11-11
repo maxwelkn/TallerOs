@@ -18,7 +18,7 @@ public sealed class MailpitMailbox(HttpClient client) : IDemoMailbox
             return new DemoMailPage(root.GetProperty("total").GetInt32(), start, 50, messages);
         }, cancellationToken);
 
-    public async Task<DemoMailMessage?> Find(Guid id, CancellationToken cancellationToken) =>
+    public async Task<DemoMailMessage?> Find(string id, CancellationToken cancellationToken) =>
         await Read<DemoMailMessage?>(async () =>
         {
             using var response = await client.GetAsync($"api/v1/message/{id}", cancellationToken);
@@ -31,7 +31,11 @@ public sealed class MailpitMailbox(HttpClient client) : IDemoMailbox
             return new(messageId, RequiredText(root, "Subject"), Recipients(root), RequiredText(root, "Text"));
         }, cancellationToken);
 
-    private static Guid Identity(JsonElement message) => Guid.Parse(RequiredText(message, "ID"));
+    private static string Identity(JsonElement message)
+    {
+        var id = RequiredText(message, "ID");
+        return DemoMailboxService.ValidId(id) ? id : throw new JsonException("Identificador inesperado.");
+    }
 
     private static string RequiredText(JsonElement message, string property) =>
         message.GetProperty(property).GetString() ?? throw new JsonException("Campo ausente.");

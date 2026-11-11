@@ -24,7 +24,7 @@ public static class AccessAuthorization
             [("PUT", "/api/admin/users/{id:guid}/enabled")] = UserRole.Administrator,
             [("POST", "/api/admin/users/{id:guid}/force-reset")] = UserRole.Administrator,
             [("GET", "/api/admin/demo-mail")] = UserRole.Administrator,
-            [("GET", "/api/admin/demo-mail/{id:guid}")] = UserRole.Administrator,
+            [("GET", "/api/admin/demo-mail/{id}")] = UserRole.Administrator,
             [("POST", "/api/documents")] = UserRole.Standard,
             [("GET", "/api/documents")] = UserRole.Standard,
             [("GET", "/api/documents/{id:guid}/download")] = UserRole.Standard,

@@ -6,7 +6,7 @@ namespace TallerOs.IntegrationTests;
 
 public sealed class MailpitMailboxTests
 {
-    private static readonly Guid MessageId = Guid.Parse("692d6e74-4b5d-4057-9725-581831419267");
+    private const string MessageId = "abcdefghijklmnopqrstuv";
 
     [Fact]
     public async Task List_TranslatesMailpitSchemaAndPagination()
@@ -14,7 +14,7 @@ public sealed class MailpitMailboxTests
         using var handler = new Handler(request =>
         {
             Assert.Equal("/api/v1/messages?start=50&limit=50", request.RequestUri!.PathAndQuery);
-            return Json("""{"total":51,"messages":[{"ID":"692d6e74-4b5d-4057-9725-581831419267","Subject":"Activación","To":[{"Address":"a@example.test"}]}]}""");
+            return Json("""{"total":51,"messages":[{"ID":"abcdefghijklmnopqrstuv","Subject":"Activación","To":[{"Address":"a@example.test"}]}]}""");
         });
         using var client = Client(handler);
 
@@ -28,7 +28,7 @@ public sealed class MailpitMailboxTests
     [Fact]
     public async Task Find_ReturnsOnlyTextAndExpectedMessage()
     {
-        using var handler = new Handler(_ => Json("""{"ID":"692d6e74-4b5d-4057-9725-581831419267","Subject":"Activación","To":[{"Address":"a@example.test"}],"Text":"Enlace ficticio","HTML":"<script>unsafe</script>"}"""));
+        using var handler = new Handler(_ => Json("""{"ID":"abcdefghijklmnopqrstuv","Subject":"Activación","To":[{"Address":"a@example.test"}],"Text":"Enlace ficticio","HTML":"<script>unsafe</script>"}"""));
         using var client = Client(handler);
 
         var result = await new MailpitMailbox(client).Find(MessageId, default);

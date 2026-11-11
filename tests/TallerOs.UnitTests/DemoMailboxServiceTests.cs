@@ -14,7 +14,7 @@ public sealed class DemoMailboxServiceTests
         var mailbox = new MailboxStub();
         var service = new DemoMailboxService(mailbox, new ActorStub(null), new(true));
 
-        var failure = detail ? (await service.Find(Guid.NewGuid())).Failure : (await service.List()).Failure;
+        var failure = detail ? (await service.Find("abcdefghijklmnopqrstuv")).Failure : (await service.List()).Failure;
 
         Assert.Equal(Failure.Unauthorized, failure);
         Assert.Equal(0, mailbox.Calls);
@@ -28,7 +28,7 @@ public sealed class DemoMailboxServiceTests
         var mailbox = new MailboxStub();
         var service = new DemoMailboxService(mailbox, new ActorStub(new(Guid.NewGuid(), false)), new(true));
 
-        var failure = detail ? (await service.Find(Guid.NewGuid())).Failure : (await service.List()).Failure;
+        var failure = detail ? (await service.Find("abcdefghijklmnopqrstuv")).Failure : (await service.List()).Failure;
 
         Assert.Equal(Failure.Forbidden, failure);
         Assert.Equal(0, mailbox.Calls);
@@ -42,7 +42,7 @@ public sealed class DemoMailboxServiceTests
         var mailbox = new MailboxStub();
         var service = Service(mailbox, enabled: false);
 
-        var failure = detail ? (await service.Find(Guid.NewGuid())).Failure : (await service.List()).Failure;
+        var failure = detail ? (await service.Find("abcdefghijklmnopqrstuv")).Failure : (await service.List()).Failure;
 
         Assert.Equal(Failure.NotFound, failure);
         Assert.Equal(0, mailbox.Calls);
@@ -55,7 +55,7 @@ public sealed class DemoMailboxServiceTests
         var service = Service(mailbox);
 
         Assert.Equal(Failure.Invalid, (await service.List(-1)).Failure);
-        Assert.Equal(Failure.Invalid, (await service.Find(Guid.Empty)).Failure);
+        Assert.Equal(Failure.Invalid, (await service.Find("")).Failure);
         Assert.Equal(0, mailbox.Calls);
     }
 
@@ -80,7 +80,7 @@ public sealed class DemoMailboxServiceTests
     {
         var service = Service(new MailboxStub());
 
-        Assert.Equal(Failure.NotFound, (await service.Find(Guid.NewGuid())).Failure);
+        Assert.Equal(Failure.NotFound, (await service.Find("abcdefghijklmnopqrstuv")).Failure);
     }
 
     [Theory]
@@ -107,7 +107,7 @@ public sealed class DemoMailboxServiceTests
 
     private sealed class MailboxStub : IDemoMailbox
     {
-        public Guid Id { get; } = Guid.NewGuid();
+        public string Id { get; } = Guid.NewGuid().ToString("N")[..22];
         public int Calls { get; private set; }
         public bool Unavailable { get; init; }
 
@@ -117,7 +117,7 @@ public sealed class DemoMailboxServiceTests
             return Task.FromResult(new DemoMailPage(1, start, 50, [new(Id, "Prueba", ["demo@example.test"])]));
         }
 
-        public Task<DemoMailMessage?> Find(Guid id, CancellationToken cancellationToken)
+        public Task<DemoMailMessage?> Find(string id, CancellationToken cancellationToken)
         {
             Called();
             return Task.FromResult(id == Id ? new DemoMailMessage(Id, "Prueba", ["demo@example.test"], "Contenido") : null);

@@ -14,7 +14,7 @@ public static class DemoMailboxEndpoints
             response.Headers.CacheControl = "no-store";
             return (await service.List(start ?? 0, cancellationToken)).ToHttp();
         });
-        mailbox.MapGet("/{id:guid}", async (Guid id, HttpResponse response, DemoMailboxService service,
+        mailbox.MapGet("/{id}", async (string id, HttpResponse response, DemoMailboxService service,
             CancellationToken cancellationToken) =>
         {
             response.Headers.CacheControl = "no-store";
