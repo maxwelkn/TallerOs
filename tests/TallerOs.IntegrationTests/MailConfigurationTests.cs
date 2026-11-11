@@ -49,6 +49,7 @@ public sealed class MailConfigurationTests
     [InlineData("SMTP_PASSWORD", "")]
     [InlineData("SMTP_PORT", "0")]
     [InlineData("SMTP_PORT", "65536")]
+    [InlineData("SMTP_PORT", "invalid")]
     public void InvalidSmtpConfiguration_IsRejected(string setting, string value)
     {
         var configuration = Configuration();

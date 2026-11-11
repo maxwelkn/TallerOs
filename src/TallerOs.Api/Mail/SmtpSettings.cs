@@ -16,7 +16,9 @@ public sealed class SmtpSettings
         From = configuration["SMTP_FROM"] ?? "";
         Username = configuration["SMTP_USER"];
         Password = configuration["SMTP_PASSWORD"];
-        Port = int.TryParse(configuration["SMTP_PORT"], out var port) ? port : 587;
+        if (!int.TryParse(configuration["SMTP_PORT"] ?? "587", out var port))
+            throw new InvalidOperationException("SMTP_PORT debe ser un puerto numérico válido.");
+        Port = port;
         UseTls = configuration.GetValue("SMTP_USE_TLS", true);
         UseAuthentication = configuration.GetValue("SMTP_USE_AUTHENTICATION", true);
         if (string.IsNullOrWhiteSpace(Host) || string.IsNullOrWhiteSpace(From)
