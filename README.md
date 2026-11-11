@@ -66,11 +66,12 @@ flowchart LR
     Sender -->|SMTP interno: mailpit:1025| Mail[mailpit]
     App -->|consulta administrativa interna: mailpit:8025| Mail
     Mail -->|persiste mensajes| Captured[(mail-data)]
+    App -->|consulta HTTPS para revisar entrega| Weather[WeatherAPI: servicio externo]
 ```
 
 Esta es una vista de despliegue y almacenamiento, separada del diagrama funcional del Core. `app` e `init` usan la misma imagen multietapa y ejecutan como el usuario sin privilegios `app`; la imagen final incluye el runtime ASP.NET y la publicación, sin SDK. El estado de init `Exited (0)` es esperado. No se copia `.env`, Git, bases, compilaciones locales ni documentos personales al contexto de construcción.
 
-`.env` queda ignorado por Git. `.env.example` contiene valores ficticios y la clave climática de ejemplo; la integración WeatherAPI corresponde al siguiente incremento y aún no tiene una operación implementada. No guardes valores reales en el Dockerfile, Compose, ejemplos, capturas ni commits. La composición incluida es de demostración local; para SMTP real conserva TLS y autenticación, define las variables del proveedor y desactiva las rutas de buzón de demostración.
+`.env` queda ignorado por Git. `.env.example` contiene valores ficticios y una clave climática de ejemplo; el proyecto arranca con ella y la revisión de entrega responde con un error controlado. No guardes valores reales en el Dockerfile, Compose, ejemplos, capturas ni commits. La composición incluida es de demostración local; para SMTP real conserva TLS y autenticación, define las variables del proveedor y desactiva las rutas de buzón de demostración.
 
 ## Ejecución local con .NET
 
@@ -119,8 +120,8 @@ Esta es una vista de despliegue y almacenamiento, separada del diagrama funciona
 | `DEMO_MODE` | Habilita explícitamente el buzón administrativo local y la configuración SMTP de demostración; por defecto `false` fuera de Compose. |
 | `MAILPIT_URL` | URL interna del buzón de demostración; en Compose `http://mailpit:8025/`. |
 | `APP_PORT` | Puerto de Windows publicado por Compose; ejemplo `5000`. Debe corresponder a `APP_BASE_URL`. |
-| `WEATHER_API_KEY` | Variable reservada para la integración climática del siguiente incremento; solo valor de ejemplo por ahora. |
-| `WORKSHOP_LOCATION` | Ubicación reservada para esa integración; ejemplo `Santo Domingo`. |
+| `WEATHER_API_KEY` | Clave del proveedor WeatherAPI, leída del entorno para la revisión de entrega. El ejemplo es ficticio y no permite obtener clima real. |
+| `WORKSHOP_LOCATION` | Ubicación del único taller usada para consultar clima; ejemplo y valor predeterminado `Santo Domingo`. |
 
 No coloques valores reales en archivos versionados ni en commits. En la ejecución local con .NET, las variables se toman del entorno: la aplicación no carga automáticamente `.env`; Compose sí utiliza ese archivo para su configuración. Para un proveedor SMTP real conserva TLS y autenticación. La demostración de Compose usa exclusivamente la captura local descrita arriba.
 
@@ -257,6 +258,38 @@ Una escritura fallida no registra el documento. Si se escribe un archivo nuevo p
 
 Con Compose, esas rutas se montan en volúmenes nombrados como se describe en Contenedor. Auditoría RF-DOC-06 y asociaciones de documentos a órdenes todavía no están implementadas.
 
+## API externa
+
+Se usa [WeatherAPI](https://www.weatherapi.com/docs/realtime-api/) para revisar las condiciones de una entrega. `GET /api/workshop/orders/{id}/delivery-review` combina una orden con la precipitación actual de la ubicación configurada y genera una recomendación; no reenvía el JSON del proveedor ni cambia el estado de la orden.
+
+Exige sesión y el mismo acceso que las consultas de órdenes: un Estándar necesita `WorkOrders.Read`; el Administrador conserva acceso. Una orden inexistente devuelve 404. Si el estado no es `InRepair`, responde 409 antes de consultar clima. Sin sesión responde 401; sin permiso, 403.
+
+Con una clave válida, devuelve 200 con `orderId`, `orderStatus`, `location`, `observedUtc`, `precipitationMm` y `recommendation`. Precipitación mayor de cero recomienda coordinar bajo techo; cero indica que no se observa precipitación. Es orientación basada en una observación actual: no es un pronóstico ni garantiza seguridad vial. Las confirmaciones y transiciones de entrega siguen siendo las existentes.
+
+La clave llega exclusivamente por `WEATHER_API_KEY` del entorno, desde `.env` en Compose. Para obtener datos reales debes usar una clave emitida por WeatherAPI; una clave inventada solo permite demostrar rechazo. Configura también `WORKSHOP_LOCATION` y recrea app para recoger cambios del entorno:
+
+```powershell
+docker compose up -d --force-recreate app
+```
+
+En ejecución directa con .NET, define esas variables en la terminal antes de arrancar; no se carga `.env` automáticamente. La API inicia aunque falte la clave y solo rechaza la revisión que necesita clima. Una clave ausente o rechazada, cuota, proveedor caído, datos inválidos, error de red o timeout devuelven 503 con mensaje comprensible. El límite de espera HTTP es 10 segundos. Un fallo de WeatherAPI no obliga al usuario a volver a iniciar sesión ni bloquea el resto del taller.
+
+Para probar, prepara una orden como en la sección del taller, agrega diagnóstico y realiza `Diagnosed → Authorized → InRepair` con las condiciones necesarias. Con `$order.id`, `$base` y las cabeceras de una sesión autorizada:
+
+```powershell
+Invoke-RestMethod "$base/api/workshop/orders/$($order.id)/delivery-review" -Headers $headers
+```
+
+La respuesta usa el instante UTC obtenido de `last_updated_epoch` y la precipitación `precip_mm`. Una revisión no confirma trabajo terminado ni cambia a `Delivered`. No se siguen redirecciones del proveedor, se limita su respuesta a 64 KiB y el cliente HTTP no registra URLs, claves o cuerpos de error externos. Los mensajes al cliente son propios de TallerOs.
+
+Ejemplo real del rechazo obtenido desde el contenedor al consultar una orden `InRepair` con una clave ficticia (HTTP 503):
+
+```json
+{"message":"El proveedor rechazó la clave de clima. Revisa WEATHER_API_KEY."}
+```
+
+Se comprobó que esa petición conserva la orden y deja disponibles las otras consultas. **La consulta meteorológica positiva real permanece pendiente de una clave válida.** Los casos positivos están comprobados con dobles HTTP y de aplicación; el ejemplo anterior es evidencia de rechazo controlado, no de obtención de clima real.
+
 ## Componentes del Core y del negocio
 
 ```mermaid
@@ -270,7 +303,7 @@ flowchart LR
         Auditoria[Auditoría: prevista]
     end
     subgraph Negocio[Módulo del taller]
-        Taller[Taller: casos de clientes, vehículos, órdenes y diagnósticos; consulta protegida]
+        Taller[Taller: clientes, vehículos, órdenes, diagnósticos y revisión de entrega]
     end
     Taller -->|consulta identidad y permiso| Acceso
     Permisos -->|obtiene actor y concede acceso| Acceso
@@ -288,6 +321,8 @@ Las flechas continuas representan conexiones implementadas y las punteadas conex
 Gestión de permisos está en `TallerOs.Domain/Permissions` y `TallerOs.Application/Permissions`. Sus contratos de acceso están en `TallerOs.Application/Access`; no conocen entidades del taller. El identificador `WorkOrders.Read` se registra en `Program.cs`. La consulta que lo consume pertenece a `TallerOs.Application/Workshop`. Los adaptadores heredados de permisos y taller permanecen en `src/TallerOs.Api/Infrastructure`; comparten el contexto existente para guardar resolución y concesión en una sola transacción. La separación física completa de infraestructura y del código heredado sigue pendiente.
 
 Documentos tiene dominio en `TallerOs.Domain/Documents`, casos de uso y contratos en `TallerOs.Application/Documents`, y adaptadores en el nuevo proyecto `TallerOs.Infrastructure`. Este depende de Application, que depende de Domain; API compone las implementaciones e invoca los casos de uso. `DocumentDbContext` solo mapea documentos y no consulta tablas de otros componentes. El uso de identidad pasa por `ICurrentActor`. El taller todavía no consume Documentos: la flecha correspondiente continúa como futura.
+
+La revisión climática pertenece al negocio. `DeliveryWeatherAssessment` interpreta precipitación en Domain; `DeliveryReviewService` coordina la consulta autorizada y el puerto `IWorkshopWeather` en Application. `WeatherApiWeather` implementa HTTP en Infrastructure. No introduce dependencias del Core hacia el taller, tablas nuevas ni cambios de máquina de estados. El servicio externo aparece en la vista de despliegue, fuera de los componentes funcionales del Core.
 
 ## Máquina de estados del negocio
 
@@ -457,6 +492,7 @@ El comando restaura dependencias, compila y ejecuta todas las suites de la soluc
 - `DocumentStorageTests`, en integración: migraciones propias, SQLite y disco temporales, reapertura, filtrado real, conservación del archivo al borrar lógicamente, escritura interrumpida, tamaño real y compensación ante fallo de SQLite.
 - `DocumentHttpTests`, en integración: las cuatro rutas con sesiones válidas e inválidas, dos Estándar y un Administrador, descargas idénticas, borrado lógico, multipart y límites de 10 MiB. La fixture configura rutas temporales explícitas de metadatos y archivos; no usa la base habitual ni SMTP.
 - `DemoMailboxServiceTests`, `MailpitMailboxTests`, `MailConfigurationTests` y las pruebas HTTP de buzón: autorización, desactivación de rutas, traducción del proveedor, errores y mantenimiento de los valores seguros SMTP. Las pruebas automatizadas sustituyen Mailpit por dobles o un destino local inaccesible; no requieren Docker ni envían correo real.
+- `DeliveryReviewTests`, `WeatherApiWeatherTests` y `DeliveryReviewHttpTests`: regla climática, acceso/estado antes de red, formato de observación, codificación, errores, timeout, cancelación y ausencia de mutación. Usan dobles o configuración vacía explícita; no consumen una clave real ni llaman al proveedor desde las suites.
 - `WorkshopPersistenceTests`, en `TallerOs.IntegrationTests`: casos y adaptadores reales del taller con SQLite temporal, sin API ni SMTP. Comprueba flujo entre contextos, concurrencia y rollback, FK inválida, conservación tras un rechazo, compatibilidad de modelo y cierre/reapertura del archivo.
 - `WorkshopHttpTests`, en el mismo proyecto: inicia automáticamente una API real en un proceso hijo oculto, un puerto local libre y una base temporal. Prepara cuentas ficticias y sesiones, realiza login HTTP y comprueba las nueve rutas, ambos roles, permisos de lectura, entradas inválidas, estados y terminal. Al terminar detiene su proceso y elimina sus archivos temporales; no usa tu base ni envía correo.
 - `PermissionsWorkshopIntegrationTests`, en `TallerOs.IntegrationTests`: cuatro casos sin servidor, sin procesos HTTP y sin dobles de Gestión de permisos o del taller. Usa `PermissionRequestService`, `WorkOrderQuery`, el catálogo configurado y los adaptadores EF reales con SQLite en memoria. Prueba listado y detalle antes/después de aprobar y antes/después de rechazar.
