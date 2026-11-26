@@ -23,6 +23,7 @@ public static class AccessAuthorization
             [("PUT", "/api/admin/users/{id:guid}/role")] = UserRole.Administrator,
             [("PUT", "/api/admin/users/{id:guid}/enabled")] = UserRole.Administrator,
             [("POST", "/api/admin/users/{id:guid}/force-reset")] = UserRole.Administrator,
+            [("GET", "/api/admin/mail-outbox")] = UserRole.Administrator,
             [("GET", "/api/admin/demo-mail")] = UserRole.Administrator,
             [("GET", "/api/admin/demo-mail/{id}")] = UserRole.Administrator,
             [("GET", "/api/notifications")] = UserRole.Standard,

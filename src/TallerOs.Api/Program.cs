@@ -81,6 +81,8 @@ builder.Services.AddSingleton<IDocumentFiles>(services =>
 builder.Services.AddScoped<DocumentService>();
 builder.Services.AddScoped<AccessService>();
 builder.Services.AddScoped<OutboxSender>();
+builder.Services.AddScoped<IMailOutboxReader, MailOutboxReader>();
+builder.Services.AddScoped<MailOutboxService>();
 builder.Services.AddScoped<INotificationStore, NotificationStore>();
 builder.Services.AddScoped<INotificationRecipients, NotificationRecipients>();
 builder.Services.AddScoped<INotificationPublisher, NotificationPublisher>();
@@ -138,7 +140,15 @@ using (var scope = app.Services.CreateScope())
     if (args.Contains("send-mail"))
     {
         var sender = scope.ServiceProvider.GetRequiredService<OutboxSender>();
-        Console.WriteLine($"Correos enviados: {await sender.SendPending()}");
+        try
+        {
+            Console.WriteLine($"Correos enviados: {await sender.SendPending()}");
+        }
+        catch (InvalidOperationException error)
+        {
+            Console.Error.WriteLine(error.Message);
+            Environment.ExitCode = 1;
+        }
         return;
     }
 }
@@ -154,5 +164,6 @@ app.MapVehicleEndpoints();
 app.MapWorkOrderEndpoints();
 app.MapDocumentEndpoints();
 app.MapNotificationEndpoints();
+app.MapMailOutboxEndpoints();
 if (demoMode) app.MapDemoMailboxEndpoints();
 await app.RunAsync();

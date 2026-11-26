@@ -60,6 +60,9 @@ namespace TallerOs.Api.Data.Migrations
                     b.Property<DateTimeOffset>("CreatedUtc")
                         .HasColumnType("TEXT");
 
+                    b.Property<DateTimeOffset?>("LastAttemptUtc")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("LastError")
                         .HasColumnType("TEXT");
 
@@ -79,6 +82,8 @@ namespace TallerOs.Api.Data.Migrations
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("State");
 
                     b.ToTable("EmailOutbox");
                 });

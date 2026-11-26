@@ -60,6 +60,7 @@ public sealed class QueuedEmail
     public MailState State { get; set; } = MailState.Pending;
     public int Attempts { get; set; }
     public DateTimeOffset CreatedUtc { get; set; }
+    public DateTimeOffset? LastAttemptUtc { get; set; }
     public DateTimeOffset? SentUtc { get; set; }
     public string? LastError { get; set; }
 }
@@ -95,6 +96,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         model.Entity<UserAccount>().Property(x => x.Role).HasConversion<string>();
         model.Entity<Notification>().HasIndex(x => new { x.RecipientId, x.EventKey }).IsUnique();
         model.Entity<NotificationPreference>().HasKey(x => x.UserId);
+        model.Entity<QueuedEmail>().HasIndex(x => x.State);
         model.Entity<QueuedEmail>().Property(x => x.State).HasConversion<string>();
         model.Entity<Customer>().Property(x => x.Id).ValueGeneratedNever();
         model.Entity<Vehicle>().Property(x => x.Id).ValueGeneratedNever();
