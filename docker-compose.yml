@@ -1,5 +1,5 @@
 x-application: &application
-  image: talleros:practica4
+  image: talleros:practica5
   build: .
   environment: &runtime-environment
     ASPNETCORE_ENVIRONMENT: Production
