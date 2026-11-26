@@ -99,6 +99,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         model.Entity<QueuedEmail>().HasIndex(x => x.State);
         model.Entity<QueuedEmail>().Property(x => x.State).HasConversion<string>();
         model.Entity<Customer>().Property(x => x.Id).ValueGeneratedNever();
+        model.Entity<Vehicle>().Property(x => x.Type).HasConversion<string>().HasDefaultValue(VehicleType.Unspecified);
+        model.Entity<WorkOrder>().HasIndex(x => x.ReceivedBy);
         model.Entity<Vehicle>().Property(x => x.Id).ValueGeneratedNever();
         model.Entity<WorkOrder>().Property(x => x.Id).ValueGeneratedNever();
         model.Entity<Diagnosis>().Property(x => x.Id).ValueGeneratedNever();

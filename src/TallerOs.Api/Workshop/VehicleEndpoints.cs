@@ -4,7 +4,7 @@ using TallerOs.Application.Workshop;
 
 namespace TallerOs.Api.Workshop;
 
-public sealed record CreateVehicleRequest(Guid CustomerId, string? LicensePlate, string? Description);
+public sealed record CreateVehicleRequest(Guid CustomerId, string? LicensePlate, string? Description, string? Type = null);
 
 public static class VehicleEndpoints
 {
@@ -15,7 +15,7 @@ public static class VehicleEndpoints
             CancellationToken cancellationToken) =>
         {
             var outcome = await service.Create(request.CustomerId, request.LicensePlate, request.Description,
-                cancellationToken);
+                cancellationToken, request.Type);
             return outcome.Failure == Failure.None && outcome.Value is { } value
                 ? Results.Created("/api/workshop/vehicles", value) : outcome.ToHttp();
         });

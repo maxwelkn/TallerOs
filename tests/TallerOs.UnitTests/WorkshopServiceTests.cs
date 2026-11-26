@@ -403,7 +403,7 @@ public sealed class WorkshopServiceTests
             Store.Orders.Add(Order);
             Customers = new CustomerService(Store, Actor);
             Vehicles = new VehicleService(Store, Store, Actor);
-            Orders = new WorkOrderService(Store, Store, Actor, new FakeNotifications());
+            Orders = new WorkOrderService(Store, Store, Actor, new FakeNotifications(), TimeProvider.System);
             Query = new WorkOrderQuery(Actor, Access, Store);
         }
 

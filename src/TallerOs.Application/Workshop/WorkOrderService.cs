@@ -6,7 +6,7 @@ using TallerOs.Domain.Workshop;
 namespace TallerOs.Application.Workshop;
 
 public sealed class WorkOrderService(IWorkOrderStore store, IVehicleStore vehicles, ICurrentActor currentActor,
-    INotificationPublisher notifications)
+    INotificationPublisher notifications, TimeProvider clock)
 {
     public async Task<Outcome<WorkOrderDetailsView>> Receive(Guid vehicleId, string? reason,
         CancellationToken cancellationToken = default)
@@ -16,7 +16,7 @@ public sealed class WorkOrderService(IWorkOrderStore store, IVehicleStore vehicl
             return Outcome<WorkOrderDetailsView>.Fail(Failure.Unauthorized, "Inicia sesión.");
 
         WorkOrder order;
-        try { order = WorkOrder.Create(vehicleId, reason); }
+        try { order = WorkOrder.Receive(vehicleId, reason, actor.Id, clock.GetUtcNow()); }
         catch (WorkshopRuleException error)
         {
             return Outcome<WorkOrderDetailsView>.Fail(Failure.Invalid, error.Message);
@@ -65,7 +65,7 @@ public sealed class WorkOrderService(IWorkOrderStore store, IVehicleStore vehicl
         try
         {
             order.MoveTo(Enum.Parse<WorkOrderStatus>(stateName), customerAuthorizationConfirmed,
-                workCompletionConfirmed, deliveryConfirmed);
+                workCompletionConfirmed, deliveryConfirmed, clock.GetUtcNow());
         }
         catch (WorkshopRuleException error)
         {

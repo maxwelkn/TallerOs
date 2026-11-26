@@ -174,7 +174,7 @@ public sealed class WorkshopPersistenceTests
             new TallerOs.Application.Notifications.NotificationPublisher(
                 new TallerOs.Api.Infrastructure.Notifications.NotificationStore(db),
                 new TallerOs.Api.Infrastructure.Access.NotificationRecipients(db),
-                new TallerOs.Api.Mail.EmailQueue(db, TimeProvider.System), TimeProvider.System));
+                new TallerOs.Api.Mail.EmailQueue(db, TimeProvider.System), TimeProvider.System), TimeProvider.System);
 
     private sealed class TestActor : ICurrentActor
     {

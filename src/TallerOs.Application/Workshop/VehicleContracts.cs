@@ -2,10 +2,11 @@ using TallerOs.Domain.Workshop;
 
 namespace TallerOs.Application.Workshop;
 
-public sealed record VehicleView(Guid Id, Guid CustomerId, string LicensePlate, string Description)
+public sealed record VehicleView(Guid Id, Guid CustomerId, string LicensePlate, string Description,
+    string Type = nameof(VehicleType.Unspecified))
 {
     public static VehicleView From(Vehicle vehicle) =>
-        new(vehicle.Id, vehicle.CustomerId, vehicle.LicensePlate, vehicle.Description);
+        new(vehicle.Id, vehicle.CustomerId, vehicle.LicensePlate, vehicle.Description, vehicle.Type.ToString());
 }
 
 public interface IVehicleStore

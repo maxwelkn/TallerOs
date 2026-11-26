@@ -7,14 +7,19 @@ namespace TallerOs.Application.Workshop;
 public sealed class VehicleService(IVehicleStore store, ICustomerStore customers, ICurrentActor currentActor)
 {
     public async Task<Outcome<VehicleView>> Create(Guid customerId, string? licensePlate, string? description,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, string? type = null)
     {
         var actor = currentActor.Get();
         if (actor is null || actor.Id == Guid.Empty)
             return Outcome<VehicleView>.Fail(Failure.Unauthorized, "Inicia sesión.");
 
+        var typeName = type is null ? nameof(VehicleType.Unspecified) : Enum.GetNames<VehicleType>()
+            .FirstOrDefault(name => string.Equals(name, type.Trim(), StringComparison.OrdinalIgnoreCase));
+        if (typeName is null)
+            return Outcome<VehicleView>.Fail(Failure.Invalid, "El tipo debe ser Automobile, Motorcycle o Unspecified.");
+
         Vehicle vehicle;
-        try { vehicle = Vehicle.Create(customerId, licensePlate, description); }
+        try { vehicle = Vehicle.Create(customerId, licensePlate, description, Enum.Parse<VehicleType>(typeName)); }
         catch (WorkshopRuleException error)
         {
             return Outcome<VehicleView>.Fail(Failure.Invalid, error.Message);

@@ -1,5 +1,7 @@
 namespace TallerOs.Domain.Workshop;
 
+public enum VehicleType { Unspecified, Automobile, Motorcycle }
+
 public sealed class Vehicle
 {
     private readonly List<WorkOrder> workOrders = [];
@@ -8,12 +10,14 @@ public sealed class Vehicle
     public Guid CustomerId { get; private set; }
     public Customer? Customer { get; private set; }
     public string LicensePlate { get; private set; } = "";
+    public VehicleType Type { get; private set; }
     public string Description { get; private set; } = "";
     public IReadOnlyCollection<WorkOrder> WorkOrders => workOrders.AsReadOnly();
 
     private Vehicle() { }
 
-    public static Vehicle Create(Guid customerId, string? licensePlate, string? description)
+    public static Vehicle Create(Guid customerId, string? licensePlate, string? description,
+        VehicleType type = VehicleType.Unspecified)
     {
         if (customerId == Guid.Empty || string.IsNullOrWhiteSpace(licensePlate)
             || string.IsNullOrWhiteSpace(description))
@@ -22,7 +26,7 @@ public sealed class Vehicle
         return new Vehicle
         {
             Id = Guid.NewGuid(), CustomerId = customerId,
-            LicensePlate = licensePlate.Trim(), Description = description.Trim()
+            LicensePlate = licensePlate.Trim(), Description = description.Trim(), Type = type
         };
     }
 }

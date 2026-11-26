@@ -353,6 +353,12 @@ namespace TallerOs.Api.Data.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("Unspecified");
+
                     b.HasKey("Id");
 
                     b.HasIndex("CustomerId");
@@ -365,8 +371,17 @@ namespace TallerOs.Api.Data.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("TEXT");
 
+                    b.Property<DateTimeOffset?>("DeliveredUtc")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Reason")
                         .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("ReceivedBy")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("ReceivedUtc")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Status")
@@ -378,6 +393,8 @@ namespace TallerOs.Api.Data.Migrations
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ReceivedBy");
 
                     b.HasIndex("VehicleId");
 
