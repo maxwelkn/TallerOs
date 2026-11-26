@@ -1,6 +1,6 @@
 # TallerOS
 
-Sistema de gestión para un solo taller de automóviles y motocicletas. Incluye Control de acceso, Gestión de permisos, Documentos y el dominio y casos de uso del taller con pruebas unitarias y de persistencia. Las operaciones HTTP del taller incluyen clientes, vehículos, órdenes, diagnósticos y avance de reparación con autorización en servidor. La API usa C# y ASP.NET Core 10, Entity Framework Core y SQLite. React se incorporará en una etapa posterior.
+Sistema de gestión para un solo taller de automóviles y motocicletas. Incluye Control de acceso, Gestión de permisos, Documentos, Notificaciones, Reportes y el dominio y casos de uso del taller con pruebas unitarias y de persistencia. Las operaciones HTTP del taller incluyen clientes, vehículos, órdenes, diagnósticos y avance de reparación con autorización en servidor. La API usa C# y ASP.NET Core 10, Entity Framework Core y SQLite. React se incorporará en una etapa posterior.
 
 ## Contenedor
 
@@ -45,7 +45,7 @@ Abre el enlace de activación mostrado y después inicia sesión como `estudiant
 | `GET /api/admin/demo-mail?start=0` | Página de hasta 50 mensajes: `total`, `start`, `limit`, `messages`, con `id`, `subject` y `to`. Incrementa `start` para páginas posteriores. |
 | `GET /api/admin/demo-mail/{id}` | Mensaje con `id`, `subject`, `to` y `text`; no sirve HTML ni adjuntos del buzón. |
 
-Ambas requieren Administrador, usan `no-store` y rechazan sesiones inválidas o usuarios Estándar con 401/403. Con `DEMO_MODE=false` no se mapean y devuelven 404. Un mensaje inexistente produce 404; un buzón caído produce 503 controlado y el resto de la API continúa funcionando. Estas rutas son una herramienta de demostración, no el componente futuro de Notificaciones ni una API de envío abierta.
+Ambas requieren Administrador, usan `no-store` y rechazan sesiones inválidas o usuarios Estándar con 401/403. Con `DEMO_MODE=false` no se mapean y devuelven 404. Un mensaje inexistente produce 404; un buzón caído produce 503 controlado y el resto de la API continúa funcionando. Estas rutas dan acceso al buzón capturado de demostración. Para consultar los avisos de tu cuenta, sigue [Notificaciones](#notificaciones).
 
 ### Datos y despliegue
 
@@ -311,6 +311,72 @@ Para evaluar la entrega, clona el repositorio, ejecuta `git checkout practica-4`
 
 La demostración acumulada utiliza los flujos ya descritos en este README: registro y activación mediante Mailpit y `send-mail`; login y logout; rechazo de rutas administrativas a un Estándar; recuperación mediante el código del correo capturado; solicitudes de permisos aprobadas y rechazadas con transiciones inválidas rechazadas; y operaciones del taller con rechazo de `Received → InRepair`. Completa la demostración con **Documentos** y la recreación de contenedores sin `-v` indicada en **Datos y despliegue**. Los datos deben conservarse, incluida la posibilidad de iniciar sesión y descargar los mismos bytes.
 
+## Práctica 5
+
+Arranca según [Contenedor](#contenedor) desde un clon con la etiqueta `practica-5`. Los [criterios de aceptación](docs/criterios-notificaciones-reportes.md) detallan los escenarios de evaluación. Usa Mailpit y cuentas ficticias.
+
+### Notificaciones
+
+1. Activa dos usuarios Estándar y un segundo Administrador siguiendo [Correo local y activación](#correo-local-y-activación). Para promover el segundo administrador usa `PUT /api/admin/users/{id}/role` con `{"role":"Administrator"}`. Conserva cabeceras de los dos administradores y los dos Estándar. El Administrador se considera activo si su cuenta está habilitada y su correo confirmado.
+2. Con cada Estándar crea una solicitud con `POST /api/permissions/requests` y `{"permission":"WorkOrders.Read"}`. Ambos administradores deben ver ambos avisos. Ningún Estándar recibe esos avisos.
+3. Aprueba una con `POST /api/permissions/requests/{id}/approve`. Rechaza la otra con `POST /api/permissions/requests/{id}/reject` y `{"reason":"Acceso no requerido"}`. La primera cuenta recibe la aprobación y la segunda recibe el rechazo con el motivo. Repetir una resolución devuelve 409 y conserva el aviso original.
+4. Sigue [Recibir una orden](#recibir-una-orden) con cualquier cuenta de sesión válida. Cada administrador activo recibe un aviso con el ID de la orden. Intenta recibir otra con un vehículo inexistente y comprueba que no se genera un aviso para esa operación.
+5. Consulta `GET /api/notifications` con cada cuenta. `readUtc` es nulo para un aviso sin leer. Intenta marcar un aviso de A con la sesión de B y comprueba el 403. Marca el mismo aviso con A dos veces y comprueba que devuelve la primera fecha de lectura en ambos casos. Sin sesión se obtiene 401.
+
+```powershell
+$notifications = Invoke-RestMethod "$base/api/notifications" -Headers $adminHeaders
+$noticeId = $notifications[0].id
+Invoke-RestMethod "$base/api/notifications/$noticeId/read" -Method Put -Headers $adminHeaders
+Invoke-RestMethod "$base/api/notifications/preferences/email" -Method Put -Headers $adminHeaders -ContentType 'application/json' -Body '{"enabled":false}'
+```
+
+El correo está activado por defecto. Recibe otra orden después de desactivarlo. El Administrador cuya cuenta cambió conserva el aviso en la bandeja, y la cola no registra un nuevo correo para esa cuenta. El otro Administrador conserva ambos canales. Usa `{"enabled":true}` para volver a activar el correo en avisos futuros. La preferencia afecta a los avisos de esta sección, mientras activación y recuperación siguen usando la cola.
+
+#### Cola de correo
+
+```powershell
+docker compose run --rm --no-deps app send-mail
+Invoke-RestMethod "$base/api/admin/mail-outbox" -Headers $adminHeaders
+Invoke-RestMethod "$base/api/admin/demo-mail" -Headers $adminHeaders
+docker compose run --rm --no-deps app send-mail
+```
+
+El primer comando entrega los pendientes a Mailpit. Compara los destinatarios y asuntos en el buzón. Si no quedan pendientes, el segundo comando informa cero envíos. `GET /api/admin/mail-outbox` muestra destinatario, asunto, estado, intentos, fechas y último error inocuo. Un Estándar recibe 403. Los cuerpos de los mensajes se pueden consultar en el buzón de demostración.
+
+En una base de demostración, vacía los pendientes con el procesador antes de provocar un fallo. Detén Mailpit con `docker compose stop mailpit`, registra una nueva cuenta ficticia y verifica que el registro responde correctamente y el correo figura `Pending` con cero intentos. Ejecuta `docker compose run --rm --no-deps app send-mail` tres veces y consulta la cola tras cada ejecución. Hay un intento por ejecución, con **máximo de tres intentos**. Los dos primeros fallos conservan `Pending` y el tercero queda `Failed` con su último error. Una cuarta ejecución conserva el estado y los tres intentos. Recupera el servicio con `docker compose up -d mailpit`. La prueba de entrega exitosa debe usar un correo nuevo.
+
+El archivo de bloqueo se guarda junto a la base. Si dos procesadores coinciden, uno obtiene el bloqueo y el otro termina con un error de reserva. Los registros confirmados como `Sent` quedan fuera de envíos posteriores. Si SMTP acepta un correo y el proceso se interrumpe antes de guardar la confirmación, un intento posterior puede repetirlo. El intento ya cuenta para el límite.
+
+### Reportes
+
+| Ruta | Filtro | Respuesta |
+| --- | --- | --- |
+| `GET /api/reports/permission-requests` | Día de creación UTC | Mes, estado actual y total de solicitudes. La aprobación aplicada aparece como `Applied`. |
+| `GET /api/reports/workshop-delivery-times` | Día de entrega UTC | Tipo de vehículo, total de órdenes entregadas y promedio de horas entre recepción y entrega. |
+
+Para obtener datos, crea solicitudes con las sesiones Estándar y completa órdenes nuevas hasta `Delivered`, siguiendo [Autorizar, iniciar reparación y entregar](#autorizar-iniciar-reparación-y-entregar). En el JSON de creación del vehículo puedes indicar `"type":"Automobile"` o `"type":"Motorcycle"`. Si omites el campo o usas `Unspecified`, el grupo aparece como `Unspecified`. Las órdenes históricas que carezcan de alguna fecha quedan fuera del promedio. Crea al menos dos solicitudes del mismo estado y dos órdenes entregadas con el mismo tipo para comprobar que se agrupan.
+
+```powershell
+$today = [DateTime]::UtcNow.ToString('yyyy-MM-dd')
+$yesterday = [DateTime]::UtcNow.AddDays(-1).ToString('yyyy-MM-dd')
+foreach ($report in 'permission-requests', 'workshop-delivery-times') {
+    Invoke-RestMethod "$base/api/reports/${report}?from=$today&to=$today" -Headers $adminHeaders
+    Invoke-RestMethod "$base/api/reports/${report}?from=$yesterday&to=$yesterday" -Headers $adminHeaders
+    Invoke-RestMethod "$base/api/reports/${report}?from=$today&to=$today" -Headers $operatorHeaders
+}
+```
+
+Sustituye las fechas por los días UTC en que creaste las solicitudes y entregaste las órdenes si la demo abarca varios días. `from` y `to` son obligatorios y ambos días cuentan. Un rango vacío de datos devuelve una lista vacía. El formato incorrecto o un rango invertido devuelve 400. Administrador ve los agregados globales. Estándar ve sus propias solicitudes y las órdenes que recibió con su cuenta, incluso si la entrega la registró otro operador. El cálculo ocurre en el servidor tras aplicar el alcance del actor.
+
+### Revisión acumulada para la entrega
+
+1. Sigue [Correo local y activación](#correo-local-y-activación) y comprueba que el correo sale por la cola.
+2. Inicia sesión como Estándar según [API y pasos para comprobar los criterios](#api-y-pasos-para-comprobar-los-criterios). Verifica el 403 en `/api/admin/users`. Cierra sesión y vuelve a enviar el token a `/api/access/me` para comprobar el 401.
+3. En [Rutas públicas](#rutas-públicas) están las entradas de recuperación. Solicita el código, ejecuta `send-mail`, consulta el mensaje en el buzón de demostración y restablece la contraseña. Inicia sesión con la nueva.
+4. Sigue los tres primeros pasos de [Notificaciones](#notificaciones). Comprueba también el 409 al resolver otra vez.
+5. Sigue [Recibir una orden](#recibir-una-orden), verifica que el salto directo a `InRepair` responde 409 y después registra un diagnóstico válido.
+6. Sigue [Documentos](#documentos) y [Datos y despliegue](#datos-y-despliegue), incluyendo `docker compose down` sin `-v`. Repite la descarga con el mismo ID y compara SHA-256.
+
 ## Componentes del Core y del negocio
 
 ```mermaid
@@ -318,9 +384,9 @@ flowchart LR
     subgraph Core[Core del curso]
         Acceso[Control de acceso: identidad, roles y acceso efectivo]
         Permisos[Gestión de permisos: solicitudes y resolución]
-        Notificaciones[Notificaciones: prevista; cola SMTP existente]
+        Notificaciones[Notificaciones: bandeja, preferencias y cola SMTP]
         Documentos[Documentos: archivos privados y borrado lógico]
-        Reportes[Reportes: previsto]
+        Reportes[Reportes: agregación por usuario y fechas]
         Auditoria[Auditoría: prevista]
     end
     subgraph Negocio[Módulo del taller]
@@ -329,15 +395,18 @@ flowchart LR
     Taller -->|consulta identidad y permiso| Acceso
     Permisos -->|obtiene actor y concede acceso| Acceso
     Documentos -->|obtiene identidad y rol| Acceso
-    Taller -.->|futuro: avisa eventos| Notificaciones
+    Taller -->|avisa la recepción de órdenes| Notificaciones
     Taller -.->|futuro opcional: adjunta archivos| Documentos
-    Taller -.->|futuro: aporta datos agregados| Reportes
+    Taller -->|aporta duraciones de entrega| Reportes
     Taller -.->|futuro: registra acciones| Auditoria
-    Permisos -.->|futuro: avisa resolución| Notificaciones
+    Permisos -->|avisa creación y resolución| Notificaciones
+    Permisos -->|aporta solicitudes por período| Reportes
+    Notificaciones -->|obtiene destinatarios y roles| Acceso
+    Reportes -->|obtiene actor y alcance| Acceso
     Permisos -.->|futuro: registra resolución| Auditoria
 ```
 
-Las flechas continuas representan conexiones implementadas y las punteadas conexiones futuras. La cola SMTP ya existe para activación y recuperación; las notificaciones internas todavía no están implementadas. Todo se ejecuta dentro de la misma aplicación.
+Las flechas continuas representan conexiones implementadas y las punteadas conexiones futuras. La cola SMTP también sirve a los flujos de activación y recuperación. Todo se ejecuta dentro de la misma aplicación.
 
 Gestión de permisos está en `TallerOs.Domain/Permissions` y `TallerOs.Application/Permissions`. Sus contratos de acceso están en `TallerOs.Application/Access`; no conocen entidades del taller. El identificador `WorkOrders.Read` se registra en `Program.cs`. La consulta que lo consume pertenece a `TallerOs.Application/Workshop`. Los adaptadores heredados de permisos y taller permanecen en `src/TallerOs.Api/Infrastructure`; comparten el contexto existente para guardar resolución y concesión en una sola transacción. La separación física completa de infraestructura y del código heredado sigue pendiente.
 
@@ -380,7 +449,7 @@ Todas las rutas siguientes se declaran en `AccessAuthorization.cs`. Exigen sesi�
 | --- | --- | --- |
 | `POST /api/workshop/customers` | `name`, `phone` | 201; cliente creado |
 | `GET /api/workshop/customers` | — | 200; lista de clientes |
-| `POST /api/workshop/vehicles` | `customerId`, `licensePlate`, `description` | 201; vehículo asociado a cliente existente |
+| `POST /api/workshop/vehicles` | `customerId`, `licensePlate`, `description`, `type` opcional | 201; vehículo asociado a cliente existente |
 | `GET /api/workshop/vehicles` | — | 200; lista de vehículos |
 | `POST /api/workshop/orders` | `vehicleId`, `reason` | 201; orden en Received |
 | `GET /api/workshop/orders` | — | 200; lista de órdenes |
