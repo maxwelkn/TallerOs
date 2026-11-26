@@ -20,6 +20,7 @@ public class WorkshopHttpFixture : IAsyncLifetime
     private bool started;
     private HttpClient? client;
 
+    public string DatabasePath => Path.Combine(directory.FullName, "http.db");
     public string DocumentsDatabasePath => Path.Combine(directory.FullName, "documents.db");
     public string DocumentsDirectory => Path.Combine(directory.FullName, "documents");
 
@@ -31,7 +32,7 @@ public class WorkshopHttpFixture : IAsyncLifetime
     {
         try
         {
-            var path = Path.Combine(directory.FullName, "http.db");
+            var path = DatabasePath;
             var password = AccessService.NewSecret() + "a1";
             var options = new DbContextOptionsBuilder<AppDbContext>()
                 .UseSqlite($"Data Source={path};Pooling=False").Options;
@@ -39,12 +40,12 @@ public class WorkshopHttpFixture : IAsyncLifetime
             {
                 await db.Database.MigrateAsync();
                 var hasher = new PasswordHasher<UserAccount>();
-                foreach (var role in new[] { "administrator", "standard", "reader", "disabled" })
+                foreach (var role in new[] { "administrator", "administrator2", "standard", "standard2", "reader", "disabled" })
                 {
                     var user = new UserAccount
                     {
                         Name = "Usuario ficticio", Email = $"{role}@example.test", EmailConfirmed = true,
-                        Role = role == "administrator" ? UserRole.Administrator : UserRole.Standard,
+                        Role = role is "administrator" or "administrator2" or "disabled" ? UserRole.Administrator : UserRole.Standard,
                         IsEnabled = role != "disabled"
                     };
                     user.PasswordHash = hasher.HashPassword(user, password);
@@ -103,7 +104,7 @@ public class WorkshopHttpFixture : IAsyncLifetime
             client.Timeout = TimeSpan.FromSeconds(15);
             using var health = await client.GetAsync("/health");
             health.EnsureSuccessStatusCode();
-            foreach (var role in new[] { "administrator", "standard", "reader" })
+            foreach (var role in new[] { "administrator", "administrator2", "standard", "standard2", "reader" })
             {
                 using var response = await client.PostAsJsonAsync("/api/access/login", new { email = $"{role}@example.test", password });
                 response.EnsureSuccessStatusCode();

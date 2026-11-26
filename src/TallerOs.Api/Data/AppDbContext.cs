@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using TallerOs.Domain.Workshop;
+using TallerOs.Domain.Notifications;
 using TallerOs.Api.Infrastructure.Access;
 using TallerOs.Domain.Permissions;
 
@@ -69,6 +70,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<ActivationToken> ActivationTokens => Set<ActivationToken>();
     public DbSet<RecoveryCode> RecoveryCodes => Set<RecoveryCode>();
     public DbSet<UserSession> Sessions => Set<UserSession>();
+    public DbSet<Notification> Notifications => Set<Notification>();
+    public DbSet<NotificationPreference> NotificationPreferences => Set<NotificationPreference>();
     public DbSet<QueuedEmail> EmailOutbox => Set<QueuedEmail>();
     public DbSet<Customer> Customers => Set<Customer>();
     public DbSet<Vehicle> Vehicles => Set<Vehicle>();
@@ -90,6 +93,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         model.Entity<ActivationToken>().HasIndex(x => x.TokenHash).IsUnique();
         model.Entity<RecoveryCode>().HasIndex(x => x.CodeHash).IsUnique();
         model.Entity<UserAccount>().Property(x => x.Role).HasConversion<string>();
+        model.Entity<Notification>().HasIndex(x => new { x.RecipientId, x.EventKey }).IsUnique();
+        model.Entity<NotificationPreference>().HasKey(x => x.UserId);
         model.Entity<QueuedEmail>().Property(x => x.State).HasConversion<string>();
         model.Entity<Customer>().Property(x => x.Id).ValueGeneratedNever();
         model.Entity<Vehicle>().Property(x => x.Id).ValueGeneratedNever();

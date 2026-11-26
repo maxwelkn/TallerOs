@@ -274,7 +274,7 @@ public sealed class PermissionRequestServiceTests
         public Scenario(bool administrator)
         {
             Actor = new FakeActor { Value = new Actor(Guid.NewGuid(), administrator) };
-            Service = new PermissionRequestService(Store, Actor, Access, new FakeCatalog(), Clock);
+            Service = new PermissionRequestService(Store, Actor, Access, new FakeCatalog(), Clock, new FakeNotifications());
         }
 
         public PermissionRequest AddRequest(Guid requester)

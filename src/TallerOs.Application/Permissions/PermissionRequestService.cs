@@ -1,11 +1,12 @@
 using TallerOs.Application.Common;
+using TallerOs.Application.Notifications;
 using TallerOs.Application.Access;
 using TallerOs.Domain.Permissions;
 
 namespace TallerOs.Application.Permissions;
 
 public sealed class PermissionRequestService(IPermissionRequestStore store, ICurrentActor currentActor,
-    IAccessPermissions access, IPermissionCatalog catalog, TimeProvider clock)
+    IAccessPermissions access, IPermissionCatalog catalog, TimeProvider clock, INotificationPublisher notifications)
 {
     public async Task<Outcome<PermissionRequestView>> Create(string? permission, CancellationToken cancellationToken = default)
     {
@@ -20,6 +21,8 @@ public sealed class PermissionRequestService(IPermissionRequestStore store, ICur
 
         var request = PermissionRequest.Create(actor.Id, permission, clock.GetUtcNow());
         store.Add(request);
+        await notifications.StageForAdministrators($"permission-created:{request.Id}", "Solicitud de permiso",
+            $"La solicitud {request.Id} pide el permiso {request.Permission}.", cancellationToken);
         if (!await store.Save(cancellationToken)) return Conflict();
         return new(PermissionRequestView.From(request));
     }
@@ -65,6 +68,11 @@ public sealed class PermissionRequestService(IPermissionRequestStore store, ICur
             return Outcome<PermissionRequestView>.Fail(Failure.Conflict, error.Message);
         }
 
+        var message = approve
+            ? $"La solicitud {request.Id} fue aprobada."
+            : $"La solicitud {request.Id} fue rechazada. Motivo: {request.RejectionReason}";
+        await notifications.StageForUser(request.RequesterId, $"permission-resolved:{request.Id}",
+            "Resolución de solicitud de permiso", message, cancellationToken);
         if (!await store.Save(cancellationToken)) return Conflict();
         return new(PermissionRequestView.From(request));
     }

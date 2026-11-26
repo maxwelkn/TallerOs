@@ -207,91 +207,53 @@ namespace TallerOs.Api.Data.Migrations
                     b.ToTable("UserPermissions");
                 });
 
-            modelBuilder.Entity("TallerOs.Api.Workshop.Customer", b =>
+            modelBuilder.Entity("TallerOs.Domain.Notifications.Notification", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("Name")
+                    b.Property<DateTimeOffset>("CreatedUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("EventKey")
                         .IsRequired()
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("Phone")
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("ReadUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("RecipientId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Subject")
                         .IsRequired()
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
-                    b.ToTable("Customers");
+                    b.HasIndex("RecipientId", "EventKey")
+                        .IsUnique();
+
+                    b.ToTable("Notifications");
                 });
 
-            modelBuilder.Entity("TallerOs.Api.Workshop.Diagnosis", b =>
+            modelBuilder.Entity("TallerOs.Domain.Notifications.NotificationPreference", b =>
                 {
-                    b.Property<Guid>("Id")
+                    b.Property<Guid>("UserId")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
+                    b.Property<bool>("EmailEnabled")
+                        .HasColumnType("INTEGER");
 
-                    b.Property<Guid>("WorkOrderId")
-                        .HasColumnType("TEXT");
+                    b.HasKey("UserId");
 
-                    b.HasKey("Id");
-
-                    b.HasIndex("WorkOrderId");
-
-                    b.ToTable("Diagnoses");
-                });
-
-            modelBuilder.Entity("TallerOs.Api.Workshop.Vehicle", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid>("CustomerId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("LicensePlate")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CustomerId");
-
-                    b.ToTable("Vehicles");
-                });
-
-            modelBuilder.Entity("TallerOs.Api.Workshop.WorkOrder", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Reason")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid>("VehicleId")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("VehicleId");
-
-                    b.ToTable("WorkOrders");
+                    b.ToTable("NotificationPreferences");
                 });
 
             modelBuilder.Entity("TallerOs.Domain.Permissions.PermissionRequest", b =>
@@ -333,9 +295,93 @@ namespace TallerOs.Api.Data.Migrations
                     b.ToTable("PermissionRequests");
                 });
 
-            modelBuilder.Entity("TallerOs.Api.Workshop.Diagnosis", b =>
+            modelBuilder.Entity("TallerOs.Domain.Workshop.Customer", b =>
                 {
-                    b.HasOne("TallerOs.Api.Workshop.WorkOrder", "WorkOrder")
+                    b.Property<Guid>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Phone")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Customers");
+                });
+
+            modelBuilder.Entity("TallerOs.Domain.Workshop.Diagnosis", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("WorkOrderId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("WorkOrderId");
+
+                    b.ToTable("Diagnoses");
+                });
+
+            modelBuilder.Entity("TallerOs.Domain.Workshop.Vehicle", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("CustomerId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LicensePlate")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CustomerId");
+
+                    b.ToTable("Vehicles");
+                });
+
+            modelBuilder.Entity("TallerOs.Domain.Workshop.WorkOrder", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Status")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("VehicleId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("VehicleId");
+
+                    b.ToTable("WorkOrders");
+                });
+
+            modelBuilder.Entity("TallerOs.Domain.Workshop.Diagnosis", b =>
+                {
+                    b.HasOne("TallerOs.Domain.Workshop.WorkOrder", "WorkOrder")
                         .WithMany("Diagnoses")
                         .HasForeignKey("WorkOrderId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -344,9 +390,9 @@ namespace TallerOs.Api.Data.Migrations
                     b.Navigation("WorkOrder");
                 });
 
-            modelBuilder.Entity("TallerOs.Api.Workshop.Vehicle", b =>
+            modelBuilder.Entity("TallerOs.Domain.Workshop.Vehicle", b =>
                 {
-                    b.HasOne("TallerOs.Api.Workshop.Customer", "Customer")
+                    b.HasOne("TallerOs.Domain.Workshop.Customer", "Customer")
                         .WithMany("Vehicles")
                         .HasForeignKey("CustomerId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -355,9 +401,9 @@ namespace TallerOs.Api.Data.Migrations
                     b.Navigation("Customer");
                 });
 
-            modelBuilder.Entity("TallerOs.Api.Workshop.WorkOrder", b =>
+            modelBuilder.Entity("TallerOs.Domain.Workshop.WorkOrder", b =>
                 {
-                    b.HasOne("TallerOs.Api.Workshop.Vehicle", "Vehicle")
+                    b.HasOne("TallerOs.Domain.Workshop.Vehicle", "Vehicle")
                         .WithMany("WorkOrders")
                         .HasForeignKey("VehicleId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -366,17 +412,17 @@ namespace TallerOs.Api.Data.Migrations
                     b.Navigation("Vehicle");
                 });
 
-            modelBuilder.Entity("TallerOs.Api.Workshop.Customer", b =>
+            modelBuilder.Entity("TallerOs.Domain.Workshop.Customer", b =>
                 {
                     b.Navigation("Vehicles");
                 });
 
-            modelBuilder.Entity("TallerOs.Api.Workshop.Vehicle", b =>
+            modelBuilder.Entity("TallerOs.Domain.Workshop.Vehicle", b =>
                 {
                     b.Navigation("WorkOrders");
                 });
 
-            modelBuilder.Entity("TallerOs.Api.Workshop.WorkOrder", b =>
+            modelBuilder.Entity("TallerOs.Domain.Workshop.WorkOrder", b =>
                 {
                     b.Navigation("Diagnoses");
                 });

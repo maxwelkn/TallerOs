@@ -4,11 +4,12 @@ using System.Text;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using TallerOs.Api.Data;
+using TallerOs.Application.Notifications;
 
 namespace TallerOs.Api.Access;
 
 public sealed partial class AccessService(AppDbContext db, IPasswordHasher<UserAccount> hasher, TimeProvider clock,
-    IConfiguration configuration)
+    IConfiguration configuration, IEmailQueue emailQueue)
 {
     public static string NewSecret() => Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
     public static string HashSecret(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
@@ -70,8 +71,5 @@ public sealed partial class AccessService(AppDbContext db, IPasswordHasher<UserA
         await db.SaveChangesAsync();
     }
 
-    public void QueueEmail(string recipient, string subject, string body) => db.EmailOutbox.Add(new QueuedEmail
-    {
-        Recipient = recipient, Subject = subject, Body = body, CreatedUtc = Now
-    });
+    private void QueueEmail(string recipient, string subject, string body) => emailQueue.Stage(recipient, subject, body);
 }

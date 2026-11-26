@@ -127,6 +127,12 @@ public sealed class PermissionsWorkshopIntegrationTests
             services.AddSingleton<IPermissionCatalog>(new ConfiguredPermissionCatalog([WorkOrderQuery.ReadPermission]));
             services.AddSingleton(TimeProvider.System);
             services.AddScoped<IPermissionRequestStore, PermissionRequestStore>();
+            services.AddScoped<TallerOs.Application.Notifications.INotificationStore,
+                TallerOs.Api.Infrastructure.Notifications.NotificationStore>();
+            services.AddScoped<INotificationRecipients, NotificationRecipients>();
+            services.AddScoped<TallerOs.Application.Notifications.IEmailQueue, TallerOs.Api.Mail.EmailQueue>();
+            services.AddScoped<TallerOs.Application.Notifications.INotificationPublisher,
+                TallerOs.Application.Notifications.NotificationPublisher>();
             services.AddScoped<PermissionRequestService>();
             services.AddScoped<ICustomerStore, CustomerStore>();
             services.AddScoped<IVehicleStore, VehicleStore>();

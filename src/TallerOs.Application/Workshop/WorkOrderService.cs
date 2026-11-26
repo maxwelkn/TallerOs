@@ -1,10 +1,12 @@
 using TallerOs.Application.Access;
 using TallerOs.Application.Common;
+using TallerOs.Application.Notifications;
 using TallerOs.Domain.Workshop;
 
 namespace TallerOs.Application.Workshop;
 
-public sealed class WorkOrderService(IWorkOrderStore store, IVehicleStore vehicles, ICurrentActor currentActor)
+public sealed class WorkOrderService(IWorkOrderStore store, IVehicleStore vehicles, ICurrentActor currentActor,
+    INotificationPublisher notifications)
 {
     public async Task<Outcome<WorkOrderDetailsView>> Receive(Guid vehicleId, string? reason,
         CancellationToken cancellationToken = default)
@@ -23,6 +25,8 @@ public sealed class WorkOrderService(IWorkOrderStore store, IVehicleStore vehicl
         if (!await vehicles.Exists(vehicleId, cancellationToken))
             return Outcome<WorkOrderDetailsView>.Fail(Failure.NotFound, "Vehículo no encontrado.");
         store.Add(order);
+        await notifications.StageForAdministrators($"order-received:{order.Id}", "Orden recibida",
+            $"El taller recibió la orden {order.Id}.", cancellationToken);
         if (!await store.Save(cancellationToken)) return Conflict();
         return new(WorkOrderDetailsView.From(order));
     }

@@ -170,7 +170,11 @@ public sealed class WorkshopPersistenceTests
     }
 
     private static WorkOrderService Service(AppDbContext db, ICurrentActor actor) =>
-        new(new WorkOrderStore(db), new VehicleStore(db), actor);
+        new(new WorkOrderStore(db), new VehicleStore(db), actor,
+            new TallerOs.Application.Notifications.NotificationPublisher(
+                new TallerOs.Api.Infrastructure.Notifications.NotificationStore(db),
+                new TallerOs.Api.Infrastructure.Access.NotificationRecipients(db),
+                new TallerOs.Api.Mail.EmailQueue(db, TimeProvider.System), TimeProvider.System));
 
     private sealed class TestActor : ICurrentActor
     {

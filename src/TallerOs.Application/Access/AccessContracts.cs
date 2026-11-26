@@ -17,3 +17,11 @@ public interface IPermissionCatalog
 {
     bool Contains(string permission);
 }
+
+public sealed record NotificationRecipient(Guid Id, string Email);
+
+public interface INotificationRecipients
+{
+    Task<IReadOnlyList<NotificationRecipient>> ActiveAdministrators(CancellationToken cancellationToken);
+    Task<NotificationRecipient?> Find(Guid userId, CancellationToken cancellationToken);
+}
